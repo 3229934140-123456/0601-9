@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>竞燃校园 - 电子竞技平台</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">⚡</div>
+                <div class="logo-text">
+                    <h1>竞燃校园</h1>
+                    <span>Campus Esports</span>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <ul>
+                    <li class="nav-item active" data-page="hall">
+                        <span class="nav-icon">🏆</span>
+                        <span class="nav-label">赛事大厅</span>
+                    </li>
+                    <li class="nav-item" data-page="team">
+                        <span class="nav-icon">👥</span>
+                        <span class="nav-label">报名组队</span>
+                    </li>
+                    <li class="nav-item" data-page="schedule">
+                        <span class="nav-icon">📅</span>
+                        <span class="nav-label">赛程编排</span>
+                    </li>
+                    <li class="nav-item" data-page="live">
+                        <span class="nav-icon">📺</span>
+                        <span class="nav-label">对阵直播</span>
+                    </li>
+                    <li class="nav-item" data-page="record">
+                        <span class="nav-icon">📊</span>
+                        <span class="nav-label">战绩中心</span>
+                    </li>
+                    <li class="nav-item" data-page="referee">
+                        <span class="nav-icon">⚖️</span>
+                        <span class="nav-label">裁判面板</span>
+                    </li>
+                    <li class="nav-item" data-page="community">
+                        <span class="nav-icon">📢</span>
+                        <span class="nav-label">公告社区</span>
+                    </li>
+                </ul>
+            </nav>
+            <div class="user-panel">
+                <div class="user-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=player1" alt="用户头像">
+                </div>
+                <div class="user-info">
+                    <p class="user-name">电竞小王子</p>
+                    <p class="user-role">赛事组织者</p>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <h2 class="page-title">赛事大厅</h2>
+                    <p class="page-desc">发现精彩校园电竞赛事</p>
+                </div>
+                <div class="header-right">
+                    <div class="search-box">
+                        <input type="text" placeholder="搜索赛事、队伍、选手...">
+                        <button class="search-btn">🔍</button>
+                    </div>
+                    <button class="notification-btn" id="notificationBtn">
+                        🔔
+                        <span class="badge">5</span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <section id="page-hall" class="page-section active"></section>
+                <section id="page-team" class="page-section"></section>
+                <section id="page-schedule" class="page-section"></section>
+                <section id="page-live" class="page-section"></section>
+                <section id="page-record" class="page-section"></section>
+                <section id="page-referee" class="page-section"></section>
+                <section id="page-community" class="page-section"></section>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-container" id="modalContainer"></div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="js/data.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/pages/hall.js"></script>
+    <script src="js/pages/team.js"></script>
+    <script src="js/pages/schedule.js"></script>
+    <script src="js/pages/live.js"></script>
+    <script src="js/pages/record.js"></script>
+    <script src="js/pages/referee.js"></script>
+    <script src="js/pages/community.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
