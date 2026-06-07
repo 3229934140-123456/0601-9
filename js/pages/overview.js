@@ -254,7 +254,7 @@ const OverviewPage = {
         const status = statusMap[match.status] || statusMap.upcoming;
 
         return `
-            <div class="mini-match-item" onclick="App.switchPage('schedule')">
+            <div class="mini-match-item" onclick="App.switchPage('live', { matchId: ${match.id} })">
                 <div class="mini-match-teams">
                     <span class="mini-team-name">${match.team1Name}</span>
                     <span class="mini-match-score">${match.status === 'ended' ? `${match.team1Score}:${match.team2Score}` : 'VS'}</span>

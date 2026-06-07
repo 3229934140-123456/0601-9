@@ -557,6 +557,14 @@ const RecordPage = {
         const issues = refereeTask?.issues || [];
 
         const matchAppeals = AppData.appeals.filter(a => a.matchId === matchId);
+        
+        const isCollected = userCollections.includes(matchId);
+        const hasStream = match.streamUrl && match.streamPlatform;
+        
+        const rematchIds = match.rematchIds || [];
+        const rematches = rematchIds.map(id => getMatchById(id)).filter(m => m);
+        const isRematch = match.isRematch;
+        const originalMatch = match.originalMatchId ? getMatchById(match.originalMatchId) : null;
 
         const content = `
             <div class="match-detail-header">
@@ -582,13 +590,37 @@ const RecordPage = {
                     <span>📍 ${match.venue}</span>
                     <span>🕐 ${match.date}</span>
                     <span>⚖️ ${refereeTask?.referee || '待定'}</span>
+                    <span class="${isCollected ? 'text-amber-400' : 'text-muted'}" onclick="RecordPage.toggleDetailCollect(${matchId})">
+                        ${isCollected ? '⭐ 已收藏' : '☆ 收藏'}
+                    </span>
                 </div>
             </div>
+
+            ${isRematch && originalMatch ? `
+            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
+                <span class="text-amber-400 text-sm">🔄 本场为重赛</span>
+                <button class="text-primary text-sm ml-2 hover:underline" onclick="Utils.closeModal(); RecordPage.showMatchDetail(${originalMatch.id})">
+                    查看原比赛 →
+                </button>
+            </div>
+            ` : ''}
+
+            ${rematches.length > 0 ? `
+            <div class="p-3 bg-primary/10 border border-primary/30 rounded-lg mb-4">
+                <span class="text-primary text-sm">🔄 本场比赛有 ${rematches.length} 场重赛</span>
+                ${rematches.map(rm => `
+                    <button class="text-primary text-sm ml-2 hover:underline" onclick="Utils.closeModal(); RecordPage.showMatchDetail(${rm.id})">
+                        查看${rm.status === 'upcoming' ? '待开始的' : '已结束的'}重赛 →
+                    </button>
+                `).join('')}
+            </div>
+            ` : ''}
 
             <div class="match-detail-tabs" id="matchDetailTabs">
                 <div class="match-detail-tab active" data-tab="screenshots">🖼️ 赛果截图 (${screenshots.length})</div>
                 <div class="match-detail-tab" data-tab="events">📋 裁判事件 (${issues.length})</div>
-                <div class="match-detail-tab" data-tab="appeals">⚖️ 申诉记录</div>
+                <div class="match-detail-tab" data-tab="appeals">⚖️ 申诉记录 (${matchAppeals.length})</div>
+                <div class="match-detail-tab" data-tab="stream">📺 直播信息</div>
             </div>
 
             <div class="match-detail-tab-content active" data-tab-content="screenshots">
@@ -621,7 +653,7 @@ const RecordPage = {
 
             <div class="match-detail-tab-content" data-tab-content="events">
                 <div class="match-detail-section">
-                    <h3 class="match-detail-section-title">📋 裁判事件记录</h3>
+                    <h3 class="match-detail-section-title">📋 裁判事件时间线</h3>
                 ${issues.length > 0 ? `
                     <div class="space-y-3">
                         ${issues.map(issue => `
@@ -684,14 +716,56 @@ const RecordPage = {
                 </div>
             </div>
 
+            <div class="match-detail-tab-content" data-tab-content="stream">
+                <div class="match-detail-section">
+                    <h3 class="match-detail-section-title">� 直播信息</h3>
+                ${hasStream ? `
+                    <div class="p-6 bg-gradient-to-br from-primary/20 to-purple-600/20 rounded-xl border border-primary/30">
+                        <div class="flex items-center gap-4 mb-4">
+                            <div class="text-4xl">
+                                ${match.streamPlatform === '斗鱼' ? '🐟' : 
+                                  match.streamPlatform === '虎牙' ? '🐯' :
+                                  match.streamPlatform === 'B站' ? '📺' :
+                                  match.streamPlatform === '抖音' ? '🎵' : '🎬'}
+                            </div>
+                            <div>
+                                <div class="text-lg font-bold">${match.streamPlatform}直播</div>
+                                <div class="text-sm text-muted">画质：${match.streamQuality || '高清'}</div>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <div class="text-sm text-muted mb-1">直播地址</div>
+                            <a href="${match.streamUrl}" target="_blank" class="text-primary hover:underline break-all">
+                                ${match.streamUrl}
+                            </a>
+                        </div>
+                        <div class="text-sm text-muted">
+                            📍 当前比赛：【${match.round}】${match.team1Name} VS ${match.team2Name}
+                        </div>
+                    </div>
+                ` : `
+                    <div class="text-center py-8">
+                        <div class="text-4xl mb-3">📺</div>
+                        <p class="text-muted mb-4">本场比赛暂无直播源</p>
+                        <button class="btn btn-primary btn-sm" onclick="Utils.closeModal(); App.switchPage('live', { matchId: ${matchId} })">
+                            🔗 前往绑定直播源
+                        </button>
+                    </div>
+                `}
+                </div>
+            </div>
+
             <div class="match-detail-section">
-                <h3 class="match-detail-section-title">📤 数据导出</h3>
-                <div class="flex gap-3">
+                <h3 class="match-detail-section-title">� 数据导出 & 操作</h3>
+                <div class="flex gap-3 flex-wrap">
                     <button class="btn btn-secondary btn-sm" onclick="Utils.exportToJSON(${JSON.stringify(JSON.stringify(match))}, '比赛详情_${match.team1Name}vs${match.team2Name}.json')">
                         📄 导出 JSON
                     </button>
                     <button class="btn btn-secondary btn-sm" onclick="RecordPage.exportMatchReport(${matchId})">
                         📊 导出战报
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="Utils.closeModal(); App.switchPage('live', { matchId: ${matchId} })">
+                        📺 查看直播回放
                     </button>
                 </div>
             </div>
@@ -756,6 +830,20 @@ const RecordPage = {
 
         Utils.exportToJSON(reportData, `战报_${match.team1Name}vs${match.team2Name}.json`);
         Utils.showToast('战报导出成功！', 'success');
+    },
+
+    toggleDetailCollect(matchId) {
+        const index = userCollections.indexOf(matchId);
+        if (index > -1) {
+            userCollections.splice(index, 1);
+            Utils.showToast('已取消收藏', 'info');
+        } else {
+            userCollections.push(matchId);
+            Utils.showToast('收藏成功', 'success');
+        }
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
+        Utils.closeModal();
+        this.showMatchDetail(matchId);
     },
 
     refresh() {

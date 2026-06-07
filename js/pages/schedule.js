@@ -3,6 +3,8 @@ const SchedulePage = {
     currentView: 'list',
     selectedRound: 'all',
     editingMatchId: null,
+    batchMode: false,
+    selectedMatchIds: [],
 
     render(container) {
         container.innerHTML = this.generateHTML();
@@ -44,6 +46,14 @@ const SchedulePage = {
                     <button class="btn btn-secondary btn-sm" id="adjustBtn">
                         ✏️ 手动调整
                     </button>
+                    <button class="btn btn-accent btn-sm ${this.batchMode ? 'active' : ''}" id="batchPublishBtn">
+                        📢 ${this.batchMode ? '取消' : '批量发布'}
+                    </button>
+                    ${this.batchMode && this.selectedMatchIds.length > 0 ? `
+                    <button class="btn btn-success btn-sm" id="confirmBatchBtn">
+                        ✅ 确认发布 (${this.selectedMatchIds.length})
+                    </button>
+                    ` : ''}
                 </div>
             </div>
 
@@ -311,9 +321,16 @@ const SchedulePage = {
 
         const isLive = match.status === 'live';
         const isEnded = match.status === 'ended';
+        const isUpcoming = match.status === 'upcoming';
+        const isSelected = this.selectedMatchIds.includes(match.id);
 
         return `
-            <div class="match-card ${isLive ? 'live' : ''}" data-match-id="${match.id}">
+            <div class="match-card ${isLive ? 'live' : ''} ${this.batchMode ? 'batch-mode' : ''} ${isSelected ? 'selected' : ''}" data-match-id="${match.id}">
+                ${this.batchMode ? `
+                <div class="match-checkbox" onclick="event.stopPropagation(); SchedulePage.toggleMatchSelect(${match.id})">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} ${!isUpcoming ? 'disabled' : ''}>
+                </div>
+                ` : ''}
                 <div class="match-info">
                     <div class="match-date">${this.formatMatchDate(match.date)}</div>
                     <div class="match-time-text">${this.formatMatchTime(match.date)}</div>
@@ -421,6 +438,18 @@ const SchedulePage = {
 
         document.getElementById('adjustBtn')?.addEventListener('click', () => {
             this.showAdjustSelectModal();
+        });
+
+        document.getElementById('batchPublishBtn')?.addEventListener('click', () => {
+            this.batchMode = !this.batchMode;
+            if (!this.batchMode) {
+                this.selectedMatchIds = [];
+            }
+            this.refresh();
+        });
+
+        document.getElementById('confirmBatchBtn')?.addEventListener('click', () => {
+            this.showBatchPublishModal();
         });
 
         const genKnockoutBtn = document.getElementById('genKnockoutBtn');
@@ -533,81 +562,67 @@ const SchedulePage = {
         const hasLiveMatches = existingMatches.some(m => m.status === 'live');
         const hasUpcomingMatches = existingMatches.some(m => m.status === 'upcoming' || m.status === 'live');
 
-        const existingPairs = new Set();
-        existingMatches.forEach(m => {
-            const pair = [m.team1Id, m.team2Id].sort().join('-');
-            existingPairs.add(pair);
-        });
-
-        const calcEstimatedMatches = (mode) => {
+        const calcEstimatedMatches = (mode, format, groupCount) => {
             if (teams.length < 2) return 0;
             
-            let total = 0;
-            
-            const format = document.getElementById('formatSelect')?.value || 'group';
-            const groupCount = parseInt(document.getElementById('groupCount')?.value || '4');
+            const existingPairs = new Set();
+            const existingRounds = new Set();
+            existingMatches.forEach(m => {
+                const pair = [m.team1Id, m.team2Id].sort().join('-');
+                existingPairs.add(pair);
+                existingRounds.add(m.round);
+            });
+
+            const orderedTeams = [...teams].sort((a, b) => a.id - b.id);
+            let newMatchCount = 0;
+            const groupNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
             
             if (format === 'group' || format === 'single') {
-                const groupMatches = Math.min(groupCount, Math.floor(teams.length / 2));
-                const knockoutTeamsCount = Math.min(groupCount * 2, teams.length, 8);
-                
-                if (knockoutTeamsCount >= 4) {
-                    const semiCount = Math.floor(knockoutTeamsCount / 2);
-                    const finalMatch = 1;
-                    total = groupMatches + semiCount + finalMatch;
-                } else {
-                    total = groupMatches;
+                for (let g = 0; g < groupCount && g < groupNames.length; g++) {
+                    const groupTeams = orderedTeams.slice(g * 2, g * 2 + 2);
+                    if (groupTeams.length < 2) continue;
+                    const pairKey = [groupTeams[0].id, groupTeams[1].id].sort().join('-');
+                    if (mode === 'append' && existingPairs.has(pairKey)) {
+                        continue;
+                    }
+                    newMatchCount++;
+                }
+
+                const knockoutTeams = orderedTeams.slice(0, Math.min(groupCount * 2, 8));
+                if (knockoutTeams.length >= 4) {
+                    for (let i = 0; i < knockoutTeams.length - 1; i += 2) {
+                        if (i + 1 >= knockoutTeams.length) break;
+                        const pairKey = [knockoutTeams[i].id, knockoutTeams[i + 1].id].sort().join('-');
+                        if (mode === 'append' && existingPairs.has(pairKey)) {
+                            continue;
+                        }
+                        newMatchCount++;
+                    }
+
+                    if (knockoutTeams.length >= 2) {
+                        if (!(mode === 'append' && existingRounds.has('决赛'))) {
+                            newMatchCount++;
+                        }
+                    }
                 }
             } else if (format === 'round') {
-                total = teams.length * (teams.length - 1) / 2;
-            } else {
-                total = Math.max(Math.floor(teams.length / 2), teams.length - 1);
-            }
-
-            if (mode === 'append') {
-                let newMatchCount = 0;
-                const shuffled = [...teams];
-                
-                if (format === 'group' || format === 'single') {
-                    const groupTeamsCount = Math.min(groupCount * 2, teams.length);
-                    for (let i = 0; i < groupTeamsCount - 1; i += 2) {
-                        if (i + 1 >= groupTeamsCount) break;
-                        const pairKey = [shuffled[i].id, shuffled[i + 1].id].sort().join('-');
-                        if (!existingPairs.has(pairKey)) {
-                            newMatchCount++;
+                for (let i = 0; i < teams.length; i++) {
+                    for (let j = i + 1; j < teams.length; j++) {
+                        const pairKey = [teams[i].id, teams[j].id].sort().join('-');
+                        if (mode === 'append' && existingPairs.has(pairKey)) {
+                            continue;
                         }
+                        newMatchCount++;
                     }
-                    const knockoutTeams = shuffled.slice(0, Math.min(groupCount * 2, 8));
-                    if (knockoutTeams.length >= 4) {
-                        for (let i = 0; i < knockoutTeams.length - 1; i += 2) {
-                            if (i + 1 >= knockoutTeams.length) break;
-                            const pairKey = [knockoutTeams[i].id, knockoutTeams[i + 1].id].sort().join('-');
-                            if (!existingPairs.has(pairKey)) {
-                                newMatchCount++;
-                            }
-                        }
-                        if (knockoutTeams.length >= 2) {
-                            newMatchCount++;
-                        }
-                    }
-                    return newMatchCount;
-                } else if (format === 'round') {
-                    for (let i = 0; i < teams.length; i++) {
-                        for (let j = i + 1; j < teams.length; j++) {
-                            const pairKey = [teams[i].id, teams[j].id].sort().join('-');
-                            if (!existingPairs.has(pairKey)) {
-                                newMatchCount++;
-                            }
-                        }
-                    }
-                    return newMatchCount;
                 }
+            } else {
+                newMatchCount = Math.max(Math.floor(teams.length / 2), teams.length - 1);
             }
             
-            return total;
+            return newMatchCount;
         };
 
-        const estimatedMatches = calcEstimatedMatches('overwrite');
+        const estimatedMatches = calcEstimatedMatches('overwrite', 'group', 4);
 
         const content = `
             <div class="form-group">
@@ -705,7 +720,9 @@ const SchedulePage = {
             const updateEstimate = () => {
                 const modeEl = document.querySelector('input[name="generateMode"]:checked');
                 const mode = modeEl ? modeEl.value : 'overwrite';
-                const count = calcEstimatedMatches(mode);
+                const format = formatSelect?.value || 'group';
+                const groupCount = parseInt(groupCountSelect?.value || '4');
+                const count = calcEstimatedMatches(mode, format, groupCount);
                 if (estimatedEl) {
                     estimatedEl.textContent = count;
                 }
@@ -738,12 +755,14 @@ const SchedulePage = {
         const format = document.getElementById('formatSelect')?.value || 'group';
 
         const existingPairs = new Set();
+        const existingRounds = new Set();
         if (mode === 'append') {
             AppData.matches
                 .filter(m => m.tournamentId === this.currentTournamentId)
                 .forEach(m => {
                     const pair = [m.team1Id, m.team2Id].sort().join('-');
                     existingPairs.add(pair);
+                    existingRounds.add(m.round);
                 });
         }
 
@@ -755,7 +774,7 @@ const SchedulePage = {
             );
         }
 
-        const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+        const orderedTeams = [...teams].sort((a, b) => a.id - b.id);
         const groupNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
         
         let matchIdCounter = Date.now();
@@ -764,7 +783,7 @@ const SchedulePage = {
 
         if (format === 'single' || format === 'group') {
             for (let g = 0; g < groupCount && g < groupNames.length; g++) {
-                const groupTeams = shuffledTeams.slice(g * 2, g * 2 + 2);
+                const groupTeams = orderedTeams.slice(g * 2, g * 2 + 2);
                 if (groupTeams.length < 2) continue;
 
                 const pairKey = [groupTeams[0].id, groupTeams[1].id].sort().join('-');
@@ -796,7 +815,7 @@ const SchedulePage = {
                 dayOffset++;
             }
 
-            const knockoutTeams = shuffledTeams.slice(0, Math.min(groupCount * 2, 8));
+            const knockoutTeams = orderedTeams.slice(0, Math.min(groupCount * 2, 8));
             if (knockoutTeams.length >= 4) {
                 for (let i = 0; i < knockoutTeams.length - 1; i += 2) {
                     if (i + 1 >= knockoutTeams.length) break;
@@ -833,35 +852,38 @@ const SchedulePage = {
                 }
 
                 if (knockoutTeams.length >= 2) {
-                    const finalDate = new Date(startDate);
-                    finalDate.setDate(finalDate.getDate() + dayOffset + 5);
-                    const finalDateStr = finalDate.toISOString().split('T')[0] + ' ' + matchTime;
+                    if (mode === 'append' && existingRounds.has('决赛')) {
+                    } else {
+                        const finalDate = new Date(startDate);
+                        finalDate.setDate(finalDate.getDate() + dayOffset + 5);
+                        const finalDateStr = finalDate.toISOString().split('T')[0] + ' ' + matchTime;
 
-                    const finalMatch = {
-                        id: matchIdCounter++,
-                        tournamentId: this.currentTournamentId,
-                        round: '决赛',
-                        team1Id: 0,
-                        team2Id: 0,
-                        team1Name: '半决赛胜者1',
-                        team2Name: '半决赛胜者2',
-                        team1Score: 0,
-                        team2Score: 0,
-                        date: finalDateStr,
-                        status: 'upcoming',
-                        venue: venue,
-                        isLive: false
-                    };
-                    AppData.matches.push(finalMatch);
-                    newMatchCount++;
+                        const finalMatch = {
+                            id: matchIdCounter++,
+                            tournamentId: this.currentTournamentId,
+                            round: '决赛',
+                            team1Id: 0,
+                            team2Id: 0,
+                            team1Name: '半决赛胜者1',
+                            team2Name: '半决赛胜者2',
+                            team1Score: 0,
+                            team2Score: 0,
+                            date: finalDateStr,
+                            status: 'upcoming',
+                            venue: venue,
+                            isLive: false
+                        };
+                        AppData.matches.push(finalMatch);
+                        newMatchCount++;
+                    }
                 }
             }
         }
 
         if (format === 'round') {
-            for (let i = 0; i < shuffledTeams.length; i++) {
-                for (let j = i + 1; j < shuffledTeams.length; j++) {
-                    const pairKey = [shuffledTeams[i].id, shuffledTeams[j].id].sort().join('-');
+            for (let i = 0; i < orderedTeams.length; i++) {
+                for (let j = i + 1; j < orderedTeams.length; j++) {
+                    const pairKey = [orderedTeams[i].id, orderedTeams[j].id].sort().join('-');
                     if (mode === 'append' && existingPairs.has(pairKey)) {
                         continue;
                     }
@@ -874,10 +896,10 @@ const SchedulePage = {
                         id: matchIdCounter++,
                         tournamentId: this.currentTournamentId,
                         round: '常规赛',
-                        team1Id: shuffledTeams[i].id,
-                        team2Id: shuffledTeams[j].id,
-                        team1Name: shuffledTeams[i].name,
-                        team2Name: shuffledTeams[j].name,
+                        team1Id: orderedTeams[i].id,
+                        team2Id: orderedTeams[j].id,
+                        team1Name: orderedTeams[i].name,
+                        team2Name: orderedTeams[j].name,
                         team1Score: 0,
                         team2Score: 0,
                         date: dateStr,
@@ -1186,6 +1208,111 @@ const SchedulePage = {
         if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('比赛信息已更新，所有页面同步生效', 'success');
         this.refresh()
+    },
+
+    toggleMatchSelect(matchId) {
+        const match = getMatchById(matchId);
+        if (!match || match.status !== 'upcoming') return;
+
+        const index = this.selectedMatchIds.indexOf(matchId);
+        if (index > -1) {
+            this.selectedMatchIds.splice(index, 1);
+        } else {
+            this.selectedMatchIds.push(matchId);
+        }
+        this.refresh();
+    },
+
+    showBatchPublishModal() {
+        if (this.selectedMatchIds.length === 0) {
+            Utils.showToast('请先选择要发布的比赛', 'error');
+            return;
+        }
+
+        const content = `
+            <div class="form-group">
+                <label class="form-label">发布时间</label>
+                <input type="datetime-local" class="form-input" id="publishTime">
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="sendReminder" checked>
+                    发送比赛提醒（赛前30分钟）
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">公告标题（可选）</label>
+                <input type="text" class="form-input" id="announcementTitle" placeholder="留空则自动生成标题">
+            </div>
+            <div class="p-4 bg-primary/10 rounded-lg border border-primary/30">
+                <p class="text-sm text-primary">
+                    📢 已选择 <strong>${this.selectedMatchIds.length}</strong> 场比赛发布
+                </p>
+                <p class="text-xs text-muted mt-1">
+                    发布后将在公告社区生成赛程公告
+                </p>
+            </div>
+        `;
+
+        Utils.showModal(content, {
+            title: '批量发布赛程',
+            confirmText: '确认发布',
+            onConfirm: () => {
+                this.doBatchPublish();
+            }
+        });
+
+        setTimeout(() => {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            const publishTimeEl = document.getElementById('publishTime');
+            if (publishTimeEl) {
+                publishTimeEl.value = now.toISOString().slice(0, 16);
+            }
+        }, 100);
+    },
+
+    doBatchPublish() {
+        const publishTime = document.getElementById('publishTime')?.value || new Date().toISOString();
+        const sendReminder = document.getElementById('sendReminder')?.checked !== false;
+        const customTitle = document.getElementById('announcementTitle')?.value;
+
+        const selectedMatches = this.selectedMatchIds
+            .map(id => getMatchById(id))
+            .filter(m => m && m.status === 'upcoming');
+
+        if (selectedMatches.length === 0) {
+            Utils.showToast('没有可发布的比赛', 'error');
+            return;
+        }
+
+        const tournament = getTournamentById(this.currentTournamentId);
+        const matchCount = selectedMatches.length;
+        const announcementTitle = customTitle || `${tournament?.name || ''} 赛程发布 - 共${matchCount}场比赛`;
+
+        const matchListText = selectedMatches.map(m => 
+            `【${m.round}】${m.team1Name} VS ${m.team2Name} - ${m.date}`
+        ).join('\\n');
+
+        const newAnnouncement = {
+            id: Date.now(),
+            tournamentId: this.currentTournamentId,
+            title: announcementTitle,
+            content: `赛程公告：\\n${matchListText}\\n\\n请各队伍准时参赛，预祝比赛顺利！`,
+            publishTime: publishTime,
+            type: 'schedule',
+            important: true
+        };
+
+        AppData.announcements.unshift(newAnnouncement);
+
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
+
+        this.batchMode = false;
+        this.selectedMatchIds = [];
+
+        Utils.showToast(`成功发布 ${matchCount} 场比赛！公告已发布`, 'success');
+        this.refresh();
     },
 
     refresh() {

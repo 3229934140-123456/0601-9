@@ -527,6 +527,7 @@ const AppData = {
         {
             id: 1,
             matchId: 3,
+            tournamentId: 1,
             tournamentName: "2024春季校园电竞联赛",
             team: "星辰战队",
             type: "比赛结果申诉",
@@ -544,6 +545,7 @@ const AppData = {
         {
             id: 2,
             matchId: 6,
+            tournamentId: 1,
             tournamentName: "2024春季校园电竞联赛",
             team: "雷霆战队",
             type: "代打举报",

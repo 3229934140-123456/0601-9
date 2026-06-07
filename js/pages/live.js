@@ -4,7 +4,10 @@ const LivePage = {
     danmakuEnabled: true,
     danmakuInterval: null,
 
-    render(container) {
+    render(container, params) {
+        if (params && params.matchId) {
+            this.currentMatchId = params.matchId;
+        }
         if (this.danmakuInterval) {
             clearInterval(this.danmakuInterval);
             this.danmakuInterval = null;

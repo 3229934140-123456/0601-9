@@ -1,22 +1,45 @@
 const RefereePage = {
     currentTab: 'tasks',
+    currentTournamentId: 1,
 
     render(container, params) {
         if (params && params.tab) {
             this.currentTab = params.tab;
+        }
+        if (params && params.tournamentId) {
+            this.currentTournamentId = params.tournamentId;
         }
         container.innerHTML = this.generateHTML();
         this.bindEvents();
     },
 
     generateHTML() {
-        const pendingAppeals = AppData.appeals.filter(a => a.status === 'pending').length;
-        const ongoingMatches = AppData.refereeTasks.filter(t => t.status === 'ongoing').length;
+        const tournaments = AppData.tournaments;
+        const currentTournament = getTournamentById(this.currentTournamentId);
+
+        const appeals = AppData.appeals.filter(a => a.tournamentId === this.currentTournamentId);
+        const tasks = AppData.refereeTasks.filter(t => t.tournamentId === this.currentTournamentId);
+
+        const pendingAppeals = appeals.filter(a => a.status === 'pending').length;
+        const ongoingMatches = tasks.filter(t => t.status === 'ongoing').length;
 
         return `
+            <div class="page-header-bar">
+                <div class="flex items-center gap-3">
+                    <select id="refereeTournamentSelect" class="form-input" style="width: auto; min-width: 200px;">
+                        ${tournaments.map(t => 
+                            `<option value="${t.id}" ${t.id === this.currentTournamentId ? 'selected' : ''}>${t.gameIcon} ${t.name}</option>`
+                        ).join('')}
+                    </select>
+                    <span class="status-badge status-${currentTournament?.status || 'upcoming'}">
+                        ${currentTournament?.status === 'ongoing' ? '进行中' : currentTournament?.status === 'upcoming' ? '即将开始' : '已结束'}
+                    </span>
+                </div>
+            </div>
+
             <div class="referee-stats">
                 <div class="ref-stat-card">
-                    <div class="ref-stat-number text-primary">${AppData.refereeTasks.length}</div>
+                    <div class="ref-stat-number text-primary">${tasks.length}</div>
                     <div class="ref-stat-label">执裁场次</div>
                 </div>
                 <div class="ref-stat-card">
@@ -28,7 +51,7 @@ const RefereePage = {
                     <div class="ref-stat-label">待处理申诉</div>
                 </div>
                 <div class="ref-stat-card">
-                    <div class="ref-stat-number text-success">${AppData.appeals.filter(a => a.status !== 'pending').length}</div>
+                    <div class="ref-stat-number text-success">${appeals.filter(a => a.status !== 'pending').length}</div>
                     <div class="ref-stat-label">已处理</div>
                 </div>
             </div>
@@ -54,7 +77,7 @@ const RefereePage = {
     },
 
     renderTasksTab() {
-        const tasks = AppData.refereeTasks;
+        const tasks = AppData.refereeTasks.filter(t => t.tournamentId === this.currentTournamentId);
 
         return `
             <div class="ref-match-list">
@@ -152,7 +175,7 @@ const RefereePage = {
     },
 
     renderAppealsTab() {
-        const appeals = AppData.appeals;
+        const appeals = AppData.appeals.filter(a => a.tournamentId === this.currentTournamentId);
 
         return `
             <div class="appeal-list">
@@ -272,6 +295,14 @@ const RefereePage = {
                 this.refresh();
             });
         });
+
+        const tournamentSelect = document.getElementById('refereeTournamentSelect');
+        if (tournamentSelect) {
+            tournamentSelect.addEventListener('change', (e) => {
+                this.currentTournamentId = parseInt(e.target.value);
+                this.refresh();
+            });
+        }
     },
 
     recordIssue(taskId) {
@@ -533,8 +564,102 @@ const RefereePage = {
         appeal.reviewComment = comment;
         appeal.handleType = handleType;
 
+        const match = getMatchById(appeal.matchId);
+
+        if (handleType === '重赛' && match) {
+            const rematchId = Date.now();
+            const rematchDate = new Date();
+            rematchDate.setDate(rematchDate.getDate() + 3);
+            const rematchDateStr = rematchDate.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).replace(/\//g, '-');
+
+            const rematch = {
+                id: rematchId,
+                tournamentId: match.tournamentId,
+                round: `${match.round}（重赛）`,
+                team1Id: match.team1Id,
+                team2Id: match.team2Id,
+                team1Name: match.team1Name,
+                team2Name: match.team2Name,
+                team1Score: 0,
+                team2Score: 0,
+                date: rematchDateStr,
+                status: 'upcoming',
+                venue: match.venue,
+                isLive: false,
+                isRematch: true,
+                originalMatchId: match.id
+            };
+
+            AppData.matches.push(rematch);
+
+            if (!match.rematchIds) match.rematchIds = [];
+            match.rematchIds.push(rematchId);
+        }
+
+        if (handleType === '改判' && match) {
+            const newScore1 = prompt('请输入新的主队比分', match.team1Score);
+            const newScore2 = prompt('请输入新的客队比分', match.team2Score);
+            
+            if (newScore1 !== null && newScore2 !== null) {
+                const oldScore1 = match.team1Score;
+                const oldScore2 = match.team2Score;
+                const team1 = getTeamById(match.team1Id);
+                const team2 = getTeamById(match.team2Id);
+
+                if (team1 && team2) {
+                    team1.wins = team1.wins || 0;
+                    team1.losses = team1.losses || 0;
+                    team1.points = team1.points || 0;
+                    team2.wins = team2.wins || 0;
+                    team2.losses = team2.losses || 0;
+                    team2.points = team2.points || 0;
+
+                    if (oldScore1 > oldScore2) {
+                        team1.wins--;
+                        team2.losses--;
+                        team1.points -= 3;
+                    } else if (oldScore2 > oldScore1) {
+                        team2.wins--;
+                        team1.losses--;
+                        team2.points -= 3;
+                    } else {
+                        team1.points -= 1;
+                        team2.points -= 1;
+                    }
+
+                    match.team1Score = parseInt(newScore1);
+                    match.team2Score = parseInt(newScore2);
+
+                    const s1 = parseInt(newScore1);
+                    const s2 = parseInt(newScore2);
+                    if (s1 > s2) {
+                        team1.wins++;
+                        team2.losses++;
+                        team1.points += 3;
+                    } else if (s2 > s1) {
+                        team2.wins++;
+                        team1.losses++;
+                        team2.points += 3;
+                    } else {
+                        team1.points += 1;
+                        team2.points += 1;
+                    }
+
+                    if (typeof SchedulePage !== 'undefined' && typeof SchedulePage.updateKnockoutBracket === 'function') {
+                        SchedulePage.updateKnockoutBracket(match.id);
+                    }
+                }
+            }
+        }
+
         if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
-        Utils.showToast('申诉已通过', 'success');
+        Utils.showToast(`申诉已通过（${handleType}）`, 'success');
         this.refresh();
     },
 
