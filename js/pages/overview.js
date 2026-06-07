@@ -63,6 +63,7 @@ const OverviewPage = {
                 value: pendingAppeals.length,
                 sub: `${refereeTasks.length}场执裁任务`,
                 page: 'referee',
+                tab: 'appeals',
                 color: 'warning'
             },
             {
@@ -84,7 +85,9 @@ const OverviewPage = {
         ];
 
         const recentMatches = matches.slice(0, 5);
-        const recentAppeals = appeals.slice(0, 4);
+        const recentAppeals = [...appeals].sort((a, b) => {
+            return new Date(b.submitTime) - new Date(a.submitTime);
+        }).slice(0, 4);
 
         return `
             <div class="overview-header">
@@ -225,8 +228,12 @@ const OverviewPage = {
             secondary: 'from-slate-500 to-slate-600'
         };
 
+        const clickHandler = stat.tab 
+            ? `App.switchPage('${stat.page}', { tab: '${stat.tab}' })`
+            : `App.switchPage('${stat.page}')`;
+
         return `
-            <div class="overview-stat-card bg-gradient-to-br ${colorMap[stat.color] || colorMap.primary}" onclick="App.switchPage('${stat.page}')">
+            <div class="overview-stat-card bg-gradient-to-br ${colorMap[stat.color] || colorMap.primary}" onclick="${clickHandler}">
                 <div class="overview-stat-icon">${stat.icon}</div>
                 <div class="overview-stat-content">
                     <div class="overview-stat-value">${stat.value}</div>
@@ -270,7 +277,7 @@ const OverviewPage = {
         const status = statusMap[appeal.status] || statusMap.pending;
 
         return `
-            <div class="mini-appeal-item" onclick="App.switchPage('referee')">
+            <div class="mini-appeal-item" onclick="App.switchPage('referee', { tab: 'appeals' })">
                 <div class="mini-appeal-header">
                     <span class="mini-appeal-type">${appeal.type}</span>
                     <span class="status-badge ${status.class} text-xs">${status.text}</span>

@@ -20,7 +20,7 @@ const App = {
         });
     },
 
-    switchPage(page) {
+    switchPage(page, params) {
         document.querySelectorAll('.nav-item').forEach(item => {
             item.classList.toggle('active', item.dataset.page === page);
         });
@@ -41,7 +41,7 @@ const App = {
         document.querySelector('.page-desc').textContent = titleInfo.desc;
 
         this.currentPage = page;
-        this.renderPage(page);
+        this.renderPage(page, params);
     },
 
     initPages() {
@@ -55,7 +55,7 @@ const App = {
         if (typeof CommunityPage !== 'undefined') this.pages.community = CommunityPage;
     },
 
-    renderPage(page) {
+    renderPage(page, params) {
         document.querySelectorAll('.page-section').forEach(section => {
             section.classList.remove('active');
         });
@@ -66,7 +66,7 @@ const App = {
         }
 
         if (this.pages[page] && typeof this.pages[page].render === 'function') {
-            this.pages[page].render(pageSection);
+            this.pages[page].render(pageSection, params);
         }
     }
 };

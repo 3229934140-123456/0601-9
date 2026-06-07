@@ -556,10 +556,7 @@ const RecordPage = {
         const refereeTask = AppData.refereeTasks.find(t => t.matchId === matchId);
         const issues = refereeTask?.issues || [];
 
-        const matchAppeals = AppData.appeals.filter(a => 
-            (a.team === match.team1Name || a.team === match.team2Name) &&
-            a.tournamentId === match.tournamentId
-        );
+        const matchAppeals = AppData.appeals.filter(a => a.matchId === matchId);
 
         const content = `
             <div class="match-detail-header">
@@ -659,9 +656,9 @@ const RecordPage = {
             ${matchAppeals.length > 0 ? `
                     <div class="space-y-3">
                         ${matchAppeals.map(appeal => `
-                            <div class="mini-appeal-item">
-                                <div class="mini-appeal-header">
-                                    <span class="mini-appeal-type">${appeal.type}</span>
+                            <div class="issue-item ${appeal.status}">
+                                <div class="issue-header">
+                                    <span class="issue-type">${appeal.type}</span>
                                     <span class="status-badge ${
                                         appeal.status === 'approved' ? 'status-active' :
                                         appeal.status === 'rejected' ? 'status-ended' : 'status-pending'
@@ -670,8 +667,11 @@ const RecordPage = {
                                           appeal.status === 'rejected' ? '申诉驳回' : '待处理'}
                                     </span>
                                 </div>
-                                <p class="mini-appeal-desc">申诉方：${appeal.team}</p>
-                                ${appeal.reviewComment ? `<p class="text-sm text-muted mt-2">处理意见：${appeal.reviewComment}</p>` : ''}
+                                <p class="issue-desc"><strong>申诉方：</strong>${appeal.team}</p>
+                                <p class="issue-desc mt-1"><strong>申诉内容：</strong>${appeal.description}</p>
+                                ${appeal.reviewer ? `<p class="text-sm text-muted mt-2"><strong>审核人：</strong>${appeal.reviewer}</p>` : ''}
+                                ${appeal.reviewTime ? `<p class="text-sm text-muted mt-1"><strong>处理时间：</strong>${appeal.reviewTime}</p>` : ''}
+                                ${appeal.reviewComment ? `<p class="text-sm text-muted mt-1"><strong>处理意见：</strong>${appeal.reviewComment}</p>` : ''}
                             </div>
                         `).join('')}
                     </div>

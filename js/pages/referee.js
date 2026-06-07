@@ -1,7 +1,10 @@
 const RefereePage = {
     currentTab: 'tasks',
 
-    render(container) {
+    render(container, params) {
+        if (params && params.tab) {
+            this.currentTab = params.tab;
+        }
         container.innerHTML = this.generateHTML();
         this.bindEvents();
     },
@@ -444,6 +447,10 @@ const RefereePage = {
             if (note) {
                 match.resultNote = note;
             }
+
+            if (typeof SchedulePage !== 'undefined' && typeof SchedulePage.updateKnockoutBracket === 'function') {
+                SchedulePage.updateKnockoutBracket(match.id);
+            }
         }
 
         const team1 = AppData.teams.find(t => t.name === task.team1);
@@ -573,6 +580,7 @@ const RefereePage = {
         }).replace(/\//g, '-');
         appeal.reviewComment = comment;
 
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('申诉已驳回', 'info');
         this.refresh();
     },

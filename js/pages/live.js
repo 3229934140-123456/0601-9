@@ -244,8 +244,10 @@ const LivePage = {
             this.toggleCollection();
         });
 
-        document.getElementById('embedStreamBtn')?.addEventListener('click', () => {
-            this.showEmbedModal();
+        document.querySelectorAll('[id^="embedStreamBtn"], .embed-stream-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.showEmbedModal();
+            });
         });
 
         document.getElementById('sendDanmakuBtn')?.addEventListener('click', () => {

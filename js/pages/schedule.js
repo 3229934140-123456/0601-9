@@ -530,9 +530,84 @@ const SchedulePage = {
         const teams = getTeamsByTournament(this.currentTournamentId);
         const existingMatches = getMatchesByTournament(this.currentTournamentId);
         const hasEndedMatches = existingMatches.some(m => m.status === 'ended');
+        const hasLiveMatches = existingMatches.some(m => m.status === 'live');
         const hasUpcomingMatches = existingMatches.some(m => m.status === 'upcoming' || m.status === 'live');
 
-        const estimatedMatches = Math.max(Math.floor(teams.length / 2), teams.length - 1);
+        const existingPairs = new Set();
+        existingMatches.forEach(m => {
+            const pair = [m.team1Id, m.team2Id].sort().join('-');
+            existingPairs.add(pair);
+        });
+
+        const calcEstimatedMatches = (mode) => {
+            if (teams.length < 2) return 0;
+            
+            let total = 0;
+            
+            const format = document.getElementById('formatSelect')?.value || 'group';
+            const groupCount = parseInt(document.getElementById('groupCount')?.value || '4');
+            
+            if (format === 'group' || format === 'single') {
+                const groupMatches = Math.min(groupCount, Math.floor(teams.length / 2));
+                const knockoutTeamsCount = Math.min(groupCount * 2, teams.length, 8);
+                
+                if (knockoutTeamsCount >= 4) {
+                    const semiCount = Math.floor(knockoutTeamsCount / 2);
+                    const finalMatch = 1;
+                    total = groupMatches + semiCount + finalMatch;
+                } else {
+                    total = groupMatches;
+                }
+            } else if (format === 'round') {
+                total = teams.length * (teams.length - 1) / 2;
+            } else {
+                total = Math.max(Math.floor(teams.length / 2), teams.length - 1);
+            }
+
+            if (mode === 'append') {
+                let newMatchCount = 0;
+                const shuffled = [...teams];
+                
+                if (format === 'group' || format === 'single') {
+                    const groupTeamsCount = Math.min(groupCount * 2, teams.length);
+                    for (let i = 0; i < groupTeamsCount - 1; i += 2) {
+                        if (i + 1 >= groupTeamsCount) break;
+                        const pairKey = [shuffled[i].id, shuffled[i + 1].id].sort().join('-');
+                        if (!existingPairs.has(pairKey)) {
+                            newMatchCount++;
+                        }
+                    }
+                    const knockoutTeams = shuffled.slice(0, Math.min(groupCount * 2, 8));
+                    if (knockoutTeams.length >= 4) {
+                        for (let i = 0; i < knockoutTeams.length - 1; i += 2) {
+                            if (i + 1 >= knockoutTeams.length) break;
+                            const pairKey = [knockoutTeams[i].id, knockoutTeams[i + 1].id].sort().join('-');
+                            if (!existingPairs.has(pairKey)) {
+                                newMatchCount++;
+                            }
+                        }
+                        if (knockoutTeams.length >= 2) {
+                            newMatchCount++;
+                        }
+                    }
+                    return newMatchCount;
+                } else if (format === 'round') {
+                    for (let i = 0; i < teams.length; i++) {
+                        for (let j = i + 1; j < teams.length; j++) {
+                            const pairKey = [teams[i].id, teams[j].id].sort().join('-');
+                            if (!existingPairs.has(pairKey)) {
+                                newMatchCount++;
+                            }
+                        }
+                    }
+                    return newMatchCount;
+                }
+            }
+            
+            return total;
+        };
+
+        const estimatedMatches = calcEstimatedMatches('overwrite');
 
         const content = `
             <div class="form-group">
@@ -589,7 +664,7 @@ const SchedulePage = {
                         <input type="radio" name="generateMode" value="overwrite" checked>
                         <div>
                             <div><strong>覆盖未开始赛程</strong></div>
-                            <div class="text-sm text-muted">替换未开始和进行中的比赛，已结束比赛保留</div>
+                            <div class="text-sm text-muted">只替换待开始的比赛，已结束和进行中的保留</div>
                         </div>
                     </label>
                     <label class="flex items-center gap-2 cursor-pointer p-3 rounded-lg border border-gray-600 hover:border-primary transition-colors">
@@ -604,9 +679,9 @@ const SchedulePage = {
             ` : ''}
             <div class="p-4 bg-amber-500/10 rounded-lg border border-amber-500/30">
                 <p class="text-sm text-amber-400">
-                    ⚡ 当前参赛队伍：${teams.length}支，预计将生成约 <strong>${estimatedMatches}</strong> 场比赛
+                    ⚡ 当前参赛队伍：${teams.length}支，预计将生成约 <strong id="estimatedCount">${estimatedMatches}</strong> 场比赛
                 </p>
-                ${hasEndedMatches ? `<p class="text-sm text-amber-400 mt-1">⚠️ 已有已结束比赛，将不会被删除</p>` : ''}
+                ${hasEndedMatches || hasLiveMatches ? `<p class="text-sm text-amber-400 mt-1">⚠️ 已有已结束或进行中的比赛，将不会被删除</p>` : ''}
             </div>
         `;
 
@@ -620,6 +695,32 @@ const SchedulePage = {
                 this.generateSchedule(mode);
             }
         });
+
+        setTimeout(() => {
+            const formatSelect = document.getElementById('formatSelect');
+            const groupCountSelect = document.getElementById('groupCount');
+            const modeRadios = document.querySelectorAll('input[name="generateMode"]');
+            const estimatedEl = document.getElementById('estimatedCount');
+
+            const updateEstimate = () => {
+                const modeEl = document.querySelector('input[name="generateMode"]:checked');
+                const mode = modeEl ? modeEl.value : 'overwrite';
+                const count = calcEstimatedMatches(mode);
+                if (estimatedEl) {
+                    estimatedEl.textContent = count;
+                }
+            };
+
+            if (formatSelect) {
+                formatSelect.addEventListener('change', updateEstimate);
+            }
+            if (groupCountSelect) {
+                groupCountSelect.addEventListener('change', updateEstimate);
+            }
+            modeRadios.forEach(radio => {
+                radio.addEventListener('change', updateEstimate);
+            });
+        }, 100);
     },
 
     generateSchedule(mode = 'overwrite') {
@@ -648,7 +749,9 @@ const SchedulePage = {
 
         if (mode === 'overwrite') {
             AppData.matches = AppData.matches.filter(m => 
-                m.tournamentId !== this.currentTournamentId || m.status === 'ended'
+                m.tournamentId !== this.currentTournamentId || 
+                m.status === 'ended' || 
+                m.status === 'live'
             );
         }
 
@@ -983,6 +1086,65 @@ const SchedulePage = {
         });
     },
 
+    updateKnockoutBracket(matchId) {
+        const match = getMatchById(matchId);
+        if (!match) return;
+
+        const tournamentMatches = getMatchesByTournament(this.currentTournamentId);
+        const knockoutMatches = tournamentMatches.filter(m => 
+            m.round.includes('决赛') || m.round.includes('半决赛') || m.round.includes('半决') ||
+            m.round.includes('四分之一') || m.round.includes('八强') || m.round.includes('四强')
+        );
+
+        const quarterFinals = knockoutMatches.filter(m => m.round.includes('四分之一') || m.round.includes('八强'));
+        const semiFinals = knockoutMatches.filter(m => m.round.includes('半决赛') || m.round.includes('半决'));
+        const finals = knockoutMatches.filter(m => m.round.includes('决赛') && !m.round.includes('半'));
+
+        const getWinner = (m) => {
+            if (m.status !== 'ended') return null;
+            if (m.team1Score > m.team2Score) {
+                return { id: m.team1Id, name: m.team1Name };
+            } else if (m.team2Score > m.team1Score) {
+                return { id: m.team2Id, name: m.team2Name };
+            }
+            return null;
+        };
+
+        const updateNextRoundMatch = (nextMatch, slot, winner) => {
+            if (!nextMatch || !winner) return;
+            if (slot === 1) {
+                nextMatch.team1Id = winner.id;
+                nextMatch.team1Name = winner.name;
+            } else {
+                nextMatch.team2Id = winner.id;
+                nextMatch.team2Name = winner.name;
+            }
+        };
+
+        if (match.round.includes('四分之一') || match.round.includes('八强')) {
+            const qfIndex = quarterFinals.findIndex(m => m.id === matchId);
+            if (qfIndex > -1 && semiFinals.length > 0) {
+                const semiIndex = Math.floor(qfIndex / 2);
+                const slot = (qfIndex % 2 === 0) ? 1 : 2;
+                const winner = getWinner(match);
+                if (semiFinals[semiIndex]) {
+                    updateNextRoundMatch(semiFinals[semiIndex], slot, winner);
+                }
+            }
+        }
+
+        if (match.round.includes('半决赛') || match.round.includes('半决')) {
+            const semiIndex = semiFinals.findIndex(m => m.id === matchId);
+            if (semiIndex > -1 && finals.length > 0) {
+                const slot = semiIndex === 0 ? 1 : 2;
+                const winner = getWinner(match);
+                if (finals[0]) {
+                    updateNextRoundMatch(finals[0], slot, winner);
+                }
+            }
+        }
+    },
+
     saveMatchEdit(matchId) {
         const match = getMatchById(matchId);
         if (!match) return;
@@ -1018,6 +1180,8 @@ const SchedulePage = {
         if (typeof AppData !== 'undefined' && AppData.onMatchUpdate) {
             AppData.onMatchUpdate(matchId);
         }
+
+        this.updateKnockoutBracket(matchId);
 
         if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('比赛信息已更新，所有页面同步生效', 'success');
