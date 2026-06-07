@@ -329,6 +329,7 @@ const TeamPage = {
         const member = team.members.find(m => m.id === memberId);
         if (member) {
             member.status = 'approved';
+            if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
             Utils.showToast(`已通过 ${member.name} 的入队申请`, 'success');
             this.refresh();
         }
@@ -342,6 +343,7 @@ const TeamPage = {
         if (memberIndex > -1) {
             const memberName = team.members[memberIndex].name;
             team.members.splice(memberIndex, 1);
+            if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
             Utils.showToast(`已拒绝 ${memberName} 的入队申请`, 'info');
             this.refresh();
         }
@@ -431,6 +433,7 @@ const TeamPage = {
 
                 AppData.teams.push(newTeam);
                 this.myTeamId = newTeam.id;
+                if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
                 Utils.showToast('队伍创建成功！', 'success');
                 this.refresh();
             }
@@ -450,6 +453,7 @@ const TeamPage = {
                 status: 'pending'
             };
             team.members.push(applicant);
+            if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
             Utils.showToast('申请已发送，等待队长审核', 'success');
         });
     }

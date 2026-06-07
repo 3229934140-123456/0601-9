@@ -29,11 +29,14 @@ const SchedulePage = {
                     <span class="text-secondary">共 ${matches.length} 场比赛</span>
                 </div>
                 <div class="flex gap-2">
-                    <button class="btn btn-secondary btn-sm ${this.currentView === 'calendar' ? 'active' : ''}" id="calendarViewBtn">
-                        📅 日历视图
-                    </button>
                     <button class="btn btn-secondary btn-sm ${this.currentView === 'list' ? 'active' : ''}" id="listViewBtn">
                         📋 列表视图
+                    </button>
+                    <button class="btn btn-secondary btn-sm ${this.currentView === 'knockout' ? 'active' : ''}" id="knockoutViewBtn">
+                        🏆 淘汰赛
+                    </button>
+                    <button class="btn btn-secondary btn-sm ${this.currentView === 'calendar' ? 'active' : ''}" id="calendarViewBtn">
+                        📅 日历视图
                     </button>
                     <button class="btn btn-primary btn-sm" id="autoGenerateBtn">
                         ⚡ 自动生成赛程
@@ -44,14 +47,62 @@ const SchedulePage = {
                 </div>
             </div>
 
+            ${this.currentView !== 'knockout' ? `
             <div class="round-tabs">
                 <div class="round-tab ${this.selectedRound === 'all' ? 'active' : ''}" data-round="all">全部</div>
                 ${rounds.map(round => `
                     <div class="round-tab ${this.selectedRound === round ? 'active' : ''}" data-round="${round}">${round}</div>
                 `).join('')}
             </div>
+            ` : ''}
 
-            ${this.currentView === 'calendar' ? this.renderCalendarView(matches) : this.renderListView(matches)}
+            ${this.currentView === 'calendar' ? this.renderCalendarView(matches) : ''}
+            ${this.currentView === 'list' ? this.renderListView(matches) : ''}
+            ${this.currentView === 'knockout' ? this.renderKnockoutView(matches) : ''}
+        `;
+    },
+
+    renderListView(matches) {
+        const filteredMatches = this.selectedRound === 'all' 
+            ? matches 
+            : matches.filter(m => m.round === this.selectedRound);
+
+        const liveMatches = filteredMatches.filter(m => m.status === 'live');
+        const upcomingMatches = filteredMatches.filter(m => m.status === 'upcoming');
+        const endedMatches = filteredMatches.filter(m => m.status === 'ended');
+
+        return `
+            ${liveMatches.length > 0 ? `
+                <div class="mb-6">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                        正在进行
+                    </h3>
+                    ${liveMatches.map(match => this.renderMatchCard(match)).join('')}
+                </div>
+            ` : ''}
+
+            ${upcomingMatches.length > 0 ? `
+                <div class="mb-6">
+                    <h3 class="text-lg font-bold mb-4">⏰ 即将开始</h3>
+                    ${upcomingMatches.map(match => this.renderMatchCard(match)).join('')}
+                </div>
+            ` : ''}
+
+            ${endedMatches.length > 0 ? `
+                <div>
+                    <h3 class="text-lg font-bold mb-4">✅ 已结束</h3>
+                    ${endedMatches.map(match => this.renderMatchCard(match)).join('')}
+                </div>
+            ` : ''}
+
+            ${filteredMatches.length === 0 ? `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📅</div>
+                    <div class="empty-state-text">暂无赛程</div>
+                    <div class="empty-state-desc">点击「自动生成赛程」创建比赛对阵</div>
+                </div>
+            ` : ''}
         `;
     },
 
@@ -119,47 +170,135 @@ const SchedulePage = {
         `;
     },
 
-    renderListView(matches) {
-        const filteredMatches = this.selectedRound === 'all' 
-            ? matches 
-            : matches.filter(m => m.round === this.selectedRound);
+    renderKnockoutView(matches) {
+        const tournament = getTournamentById(this.currentTournamentId);
+        const teams = getTeamsByTournament(this.currentTournamentId);
+        
+        const knockoutMatches = matches.filter(m => 
+            m.round.includes('决赛') || m.round.includes('半决赛') || m.round.includes('半决') ||
+            m.round.includes('四分之一') || m.round.includes('八强') || m.round.includes('四强')
+        );
 
-        const liveMatches = filteredMatches.filter(m => m.status === 'live');
-        const upcomingMatches = filteredMatches.filter(m => m.status === 'upcoming');
-        const endedMatches = filteredMatches.filter(m => m.status === 'ended');
+        const quarterFinals = knockoutMatches.filter(m => m.round.includes('四分之一') || m.round.includes('八强'));
+        const semiFinals = knockoutMatches.filter(m => m.round.includes('半决赛') || m.round.includes('半决'));
+        const finals = knockoutMatches.filter(m => m.round.includes('决赛') && !m.round.includes('半'));
+
+        if (knockoutMatches.length === 0) {
+            return `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🏆</div>
+                    <div class="empty-state-text">暂无淘汰赛赛程</div>
+                    <div class="empty-state-desc">请先生成包含淘汰赛阶段的赛程</div>
+                    <button class="btn btn-primary mt-4" id="genKnockoutBtn">生成淘汰赛对阵</button>
+                </div>
+            `;
+        }
+
+        const getMatchWinner = (match) => {
+            if (match.status !== 'ended') return null;
+            return match.team1Score > match.team2Score ? match.team1Name : 
+                   match.team2Score > match.team1Score ? match.team2Name : null;
+        };
+
+        const getMatchLoser = (match) => {
+            if (match.status !== 'ended') return null;
+            return match.team1Score < match.team2Score ? match.team1Name : 
+                   match.team2Score < match.team1Score ? match.team2Name : null;
+        };
+
+        const renderKnockoutMatch = (match) => {
+            const winner = getMatchWinner(match);
+            const loser = getMatchLoser(match);
+            
+            return `
+                <div class="knockout-match" onclick="SchedulePage.showEditMatchModal(${match.id})">
+                    <div class="knockout-team ${winner === match.team1Name ? 'winner' : ''} ${loser === match.team1Name ? 'loser' : ''}">
+                        <span class="knockout-team-name">
+                            ${winner === match.team1Name ? '🏆 ' : ''}${match.team1Name}
+                        </span>
+                        <span class="knockout-team-score">${match.status === 'ended' ? match.team1Score : '-'}</span>
+                    </div>
+                    <div class="knockout-team ${winner === match.team2Name ? 'winner' : ''} ${loser === match.team2Name ? 'loser' : ''}">
+                        <span class="knockout-team-name">
+                            ${winner === match.team2Name ? '🏆 ' : ''}${match.team2Name}
+                        </span>
+                        <span class="knockout-team-score">${match.status === 'ended' ? match.team2Score : '-'}</span>
+                    </div>
+                    <div class="knockout-match-info">
+                        <span>${this.formatMatchDate(match.date)}</span>
+                        <span>${match.status === 'live' ? '直播中' : match.status === 'ended' ? '已结束' : '待开始'}</span>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderPlaceholderMatch = (teamName) => {
+            return `
+                <div class="knockout-match empty">
+                    <div class="knockout-team tbd">
+                        <span class="knockout-team-name">${teamName || '待定'}</span>
+                        <span class="knockout-team-score">-</span>
+                    </div>
+                    <div class="knockout-team tbd">
+                        <span class="knockout-team-name">待定</span>
+                        <span class="knockout-team-score">-</span>
+                    </div>
+                    <div class="knockout-match-info">
+                        <span>TBD</span>
+                        <span>未开始</span>
+                    </div>
+                </div>
+            `;
+        };
+
+        const semiWinners = semiFinals.map(getMatchWinner).filter(Boolean);
+        const quarterWinners = quarterFinals.map(getMatchWinner).filter(Boolean);
 
         return `
-            ${liveMatches.length > 0 ? `
-                <div class="mb-6">
-                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                        <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
-                        正在进行
-                    </h3>
-                    ${liveMatches.map(match => this.renderMatchCard(match)).join('')}
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🏆 淘汰赛对阵图</h3>
+                    <span class="text-sm text-muted">点击比赛卡片可编辑对阵信息</span>
                 </div>
-            ` : ''}
+                <div class="card-body">
+                    <div class="knockout-view">
+                        <div class="knockout-bracket">
+                            ${quarterFinals.length > 0 ? `
+                                <div class="knockout-round">
+                                    <div class="knockout-round-title">四分之一决赛</div>
+                                    ${quarterFinals.map(m => renderKnockoutMatch(m)).join('')}
+                                </div>
+                            ` : ''}
 
-            ${upcomingMatches.length > 0 ? `
-                <div class="mb-6">
-                    <h3 class="text-lg font-bold mb-4">⏰ 即将开始</h3>
-                    ${upcomingMatches.map(match => this.renderMatchCard(match)).join('')}
-                </div>
-            ` : ''}
+                            ${semiFinals.length > 0 ? `
+                                <div class="knockout-round">
+                                    <div class="knockout-round-title">半决赛</div>
+                                    ${semiFinals.map(m => renderKnockoutMatch(m)).join('')}
+                                </div>
+                            ` : ''}
 
-            ${endedMatches.length > 0 ? `
-                <div>
-                    <h3 class="text-lg font-bold mb-4">✅ 已结束</h3>
-                    ${endedMatches.map(match => this.renderMatchCard(match)).join('')}
-                </div>
-            ` : ''}
+                            ${finals.length > 0 ? `
+                                <div class="knockout-round">
+                                    <div class="knockout-round-title">决赛</div>
+                                    ${finals.map(m => renderKnockoutMatch(m)).join('')}
+                                    <div style="text-align: center; margin-top: 12px;">
+                                        <span style="font-size: 24px;">🏆</span>
+                                        <span style="color: var(--success); font-weight: 700; margin-left: 8px;">
+                                            ${getMatchWinner(finals[0]) || '冠军待定'}
+                                        </span>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
 
-            ${filteredMatches.length === 0 ? `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📅</div>
-                    <div class="empty-state-text">暂无赛程</div>
-                    <div class="empty-state-desc">点击「自动生成赛程」创建比赛对阵</div>
+                    <div class="mt-6 p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                        <p class="text-sm text-blue-400">
+                            💡 提示：比赛结束后，获胜队伍会自动标记并显示 🏆 标识，点击任意比赛卡片可手动调整结果
+                        </p>
+                    </div>
                 </div>
-            ` : ''}
+            </div>
         `;
     },
 
@@ -230,6 +369,7 @@ const SchedulePage = {
     },
 
     formatMatchDate(dateStr) {
+        if (!dateStr) return '待定';
         const date = new Date(dateStr);
         const month = date.getMonth() + 1;
         const day = date.getDate();
@@ -238,6 +378,7 @@ const SchedulePage = {
     },
 
     formatMatchTime(dateStr) {
+        if (!dateStr) return '--:--';
         const date = new Date(dateStr);
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
@@ -254,6 +395,11 @@ const SchedulePage = {
 
         document.getElementById('listViewBtn')?.addEventListener('click', () => {
             this.currentView = 'list';
+            this.refresh();
+        });
+
+        document.getElementById('knockoutViewBtn')?.addEventListener('click', () => {
+            this.currentView = 'knockout';
             this.refresh();
         });
 
@@ -274,13 +420,15 @@ const SchedulePage = {
         });
 
         document.getElementById('adjustBtn')?.addEventListener('click', () => {
-            const matches = getMatchesByTournament(this.currentTournamentId);
-            if (matches.length === 0) {
-                Utils.showToast('暂无比赛可调整，请先生成赛程', 'warning');
-                return;
-            }
-            Utils.showToast('点击比赛卡片上的「编辑」按钮进行调整', 'info');
+            this.showAdjustSelectModal();
         });
+
+        const genKnockoutBtn = document.getElementById('genKnockoutBtn');
+        if (genKnockoutBtn) {
+            genKnockoutBtn.addEventListener('click', () => {
+                this.generateKnockoutSchedule();
+            });
+        }
 
         document.querySelectorAll('.remind-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -299,7 +447,10 @@ const SchedulePage = {
         document.querySelectorAll('.view-result-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                App.switchPage('record');
+                const matchId = parseInt(btn.dataset.matchId);
+                if (typeof RecordPage !== 'undefined') {
+                    RecordPage.showMatchDetail(matchId);
+                }
             });
         });
 
@@ -319,9 +470,59 @@ const SchedulePage = {
         });
     },
 
-    refresh() {
-        const container = document.getElementById('page-schedule');
-        this.render(container);
+    showAdjustSelectModal() {
+        const matches = getMatchesByTournament(this.currentTournamentId);
+
+        if (matches.length === 0) {
+            Utils.showToast('暂无比赛可调整，请先生成赛程', 'warning');
+            return;
+        }
+
+        const content = `
+            <p class="text-muted text-sm mb-4">请选择要调整的比赛：</p>
+            <div class="space-y-2" style="max-height: 400px; overflow-y: auto;">
+                ${matches.map(match => `
+                    <div class="adjust-match-item" data-match-id="${match.id}">
+                        <div class="flex-between items-center">
+                            <div>
+                                <div class="font-semibold">${match.team1Name} VS ${match.team2Name}</div>
+                                <div class="text-sm text-muted">${match.round} · ${this.formatMatchDate(match.date)}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="status-badge ${
+                                    match.status === 'live' ? 'status-live' : 
+                                    match.status === 'ended' ? 'status-ended' : 'status-pending'
+                                } text-xs">
+                                    ${match.status === 'live' ? '进行中' : match.status === 'ended' ? '已结束' : '待开始'}
+                                </span>
+                                <button class="btn btn-primary btn-sm select-match-btn" data-match-id="${match.id}">
+                                    编辑
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        Utils.showModal(content, {
+            title: '✏️ 手动调整 - 选择比赛',
+            size: 'lg',
+            showFooter: false
+        });
+
+        setTimeout(() => {
+            document.querySelectorAll('.select-match-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const matchId = parseInt(btn.dataset.matchId);
+                    Utils.closeModal();
+                    setTimeout(() => {
+                        this.showEditMatchModal(matchId);
+                    }, 200);
+                });
+            });
+        }, 100);
     },
 
     showAutoGenerateModal() {
@@ -330,6 +531,8 @@ const SchedulePage = {
         const existingMatches = getMatchesByTournament(this.currentTournamentId);
         const hasEndedMatches = existingMatches.some(m => m.status === 'ended');
         const hasUpcomingMatches = existingMatches.some(m => m.status === 'upcoming' || m.status === 'live');
+
+        const estimatedMatches = Math.max(Math.floor(teams.length / 2), teams.length - 1);
 
         const content = `
             <div class="form-group">
@@ -382,20 +585,26 @@ const SchedulePage = {
             <div class="form-group">
                 <label class="form-label">生成方式</label>
                 <div class="space-y-2">
-                    <label class="flex items-center gap-2 cursor-pointer">
+                    <label class="flex items-center gap-2 cursor-pointer p-3 rounded-lg border border-gray-600 hover:border-primary transition-colors">
                         <input type="radio" name="generateMode" value="overwrite" checked>
-                        <span><strong>覆盖未开始赛程</strong> - 替换未开始的比赛，已结束比赛保留</span>
+                        <div>
+                            <div><strong>覆盖未开始赛程</strong></div>
+                            <div class="text-sm text-muted">替换未开始和进行中的比赛，已结束比赛保留</div>
+                        </div>
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
+                    <label class="flex items-center gap-2 cursor-pointer p-3 rounded-lg border border-gray-600 hover:border-primary transition-colors">
                         <input type="radio" name="generateMode" value="append">
-                        <span><strong>追加新赛程</strong> - 在现有基础上新增比赛</span>
+                        <div>
+                            <div><strong>追加新赛程</strong></div>
+                            <div class="text-sm text-muted">在现有基础上新增，避免完全重复的对阵</div>
+                        </div>
                     </label>
                 </div>
             </div>
             ` : ''}
             <div class="p-4 bg-amber-500/10 rounded-lg border border-amber-500/30">
                 <p class="text-sm text-amber-400">
-                    ⚡ 当前参赛队伍：${teams.length}支，预计将生成约 ${Math.ceil(teams.length / 2)} 场比赛
+                    ⚡ 当前参赛队伍：${teams.length}支，预计将生成约 <strong>${estimatedMatches}</strong> 场比赛
                 </p>
                 ${hasEndedMatches ? `<p class="text-sm text-amber-400 mt-1">⚠️ 已有已结束比赛，将不会被删除</p>` : ''}
             </div>
@@ -403,7 +612,7 @@ const SchedulePage = {
 
         Utils.showModal(content, {
             title: '自动生成赛程',
-            size: 'md',
+            size: 'lg',
             confirmText: '开始生成',
             onConfirm: () => {
                 const modeEl = document.querySelector('input[name="generateMode"]:checked');
@@ -425,6 +634,17 @@ const SchedulePage = {
         const matchTime = document.getElementById('matchTimeInput')?.value || '14:00';
         const venue = document.getElementById('venueSelect')?.value || '主赛场';
         const groupCount = parseInt(document.getElementById('groupCount')?.value || '4');
+        const format = document.getElementById('formatSelect')?.value || 'group';
+
+        const existingPairs = new Set();
+        if (mode === 'append') {
+            AppData.matches
+                .filter(m => m.tournamentId === this.currentTournamentId)
+                .forEach(m => {
+                    const pair = [m.team1Id, m.team2Id].sort().join('-');
+                    existingPairs.add(pair);
+                });
+        }
 
         if (mode === 'overwrite') {
             AppData.matches = AppData.matches.filter(m => 
@@ -437,64 +657,235 @@ const SchedulePage = {
         
         let matchIdCounter = Date.now();
         let dayOffset = 0;
+        let newMatchCount = 0;
 
-        for (let g = 0; g < groupCount && g < groupNames.length; g++) {
-            const groupTeams = shuffledTeams.slice(g * 2, g * 2 + 2);
-            if (groupTeams.length < 2) continue;
+        if (format === 'single' || format === 'group') {
+            for (let g = 0; g < groupCount && g < groupNames.length; g++) {
+                const groupTeams = shuffledTeams.slice(g * 2, g * 2 + 2);
+                if (groupTeams.length < 2) continue;
 
-            const matchDate = new Date(startDate);
-            matchDate.setDate(matchDate.getDate() + dayOffset);
-            const dateStr = matchDate.toISOString().split('T')[0] + ' ' + matchTime;
+                const pairKey = [groupTeams[0].id, groupTeams[1].id].sort().join('-');
+                if (mode === 'append' && existingPairs.has(pairKey)) {
+                    continue;
+                }
 
-            const newMatch = {
-                id: matchIdCounter++,
-                tournamentId: this.currentTournamentId,
-                round: `小组赛${groupNames[g]}组`,
-                team1Id: groupTeams[0].id,
-                team2Id: groupTeams[1].id,
-                team1Name: groupTeams[0].name,
-                team2Name: groupTeams[1].name,
-                team1Score: 0,
-                team2Score: 0,
-                date: dateStr,
-                status: 'upcoming',
-                venue: venue,
-                isLive: false
-            };
-            AppData.matches.push(newMatch);
+                const matchDate = new Date(startDate);
+                matchDate.setDate(matchDate.getDate() + dayOffset);
+                const dateStr = matchDate.toISOString().split('T')[0] + ' ' + matchTime;
 
-            dayOffset++;
+                const newMatch = {
+                    id: matchIdCounter++,
+                    tournamentId: this.currentTournamentId,
+                    round: `小组赛${groupNames[g]}组`,
+                    team1Id: groupTeams[0].id,
+                    team2Id: groupTeams[1].id,
+                    team1Name: groupTeams[0].name,
+                    team2Name: groupTeams[1].name,
+                    team1Score: 0,
+                    team2Score: 0,
+                    date: dateStr,
+                    status: 'upcoming',
+                    venue: venue,
+                    isLive: false
+                };
+                AppData.matches.push(newMatch);
+                newMatchCount++;
+                dayOffset++;
+            }
+
+            const knockoutTeams = shuffledTeams.slice(0, Math.min(groupCount * 2, 8));
+            if (knockoutTeams.length >= 4) {
+                for (let i = 0; i < knockoutTeams.length - 1; i += 2) {
+                    if (i + 1 >= knockoutTeams.length) break;
+
+                    const pairKey = [knockoutTeams[i].id, knockoutTeams[i + 1].id].sort().join('-');
+                    if (mode === 'append' && existingPairs.has(pairKey)) {
+                        continue;
+                    }
+
+                    const matchDate = new Date(startDate);
+                    matchDate.setDate(matchDate.getDate() + dayOffset + 3);
+                    const dateStr = matchDate.toISOString().split('T')[0] + ' ' + matchTime;
+
+                    const roundName = knockoutTeams.length <= 4 ? '半决赛' : '四分之一决赛';
+
+                    const newMatch = {
+                        id: matchIdCounter++,
+                        tournamentId: this.currentTournamentId,
+                        round: roundName,
+                        team1Id: knockoutTeams[i].id,
+                        team2Id: knockoutTeams[i + 1].id,
+                        team1Name: knockoutTeams[i].name,
+                        team2Name: knockoutTeams[i + 1].name,
+                        team1Score: 0,
+                        team2Score: 0,
+                        date: dateStr,
+                        status: 'upcoming',
+                        venue: venue,
+                        isLive: false
+                    };
+                    AppData.matches.push(newMatch);
+                    newMatchCount++;
+                    dayOffset++;
+                }
+
+                if (knockoutTeams.length >= 2) {
+                    const finalDate = new Date(startDate);
+                    finalDate.setDate(finalDate.getDate() + dayOffset + 5);
+                    const finalDateStr = finalDate.toISOString().split('T')[0] + ' ' + matchTime;
+
+                    const finalMatch = {
+                        id: matchIdCounter++,
+                        tournamentId: this.currentTournamentId,
+                        round: '决赛',
+                        team1Id: 0,
+                        team2Id: 0,
+                        team1Name: '半决赛胜者1',
+                        team2Name: '半决赛胜者2',
+                        team1Score: 0,
+                        team2Score: 0,
+                        date: finalDateStr,
+                        status: 'upcoming',
+                        venue: venue,
+                        isLive: false
+                    };
+                    AppData.matches.push(finalMatch);
+                    newMatchCount++;
+                }
+            }
         }
 
-        const remainingTeams = shuffledTeams.slice(groupCount * 2);
-        for (let i = 0; i < remainingTeams.length - 1; i += 2) {
-            if (i + 1 >= remainingTeams.length) break;
+        if (format === 'round') {
+            for (let i = 0; i < shuffledTeams.length; i++) {
+                for (let j = i + 1; j < shuffledTeams.length; j++) {
+                    const pairKey = [shuffledTeams[i].id, shuffledTeams[j].id].sort().join('-');
+                    if (mode === 'append' && existingPairs.has(pairKey)) {
+                        continue;
+                    }
 
-            const matchDate = new Date(startDate);
-            matchDate.setDate(matchDate.getDate() + dayOffset);
-            const dateStr = matchDate.toISOString().split('T')[0] + ' ' + matchTime;
+                    const matchDate = new Date(startDate);
+                    matchDate.setDate(matchDate.getDate() + dayOffset);
+                    const dateStr = matchDate.toISOString().split('T')[0] + ' ' + matchTime;
 
-            const newMatch = {
-                id: matchIdCounter++,
-                tournamentId: this.currentTournamentId,
-                round: '附加赛',
-                team1Id: remainingTeams[i].id,
-                team2Id: remainingTeams[i + 1].id,
-                team1Name: remainingTeams[i].name,
-                team2Name: remainingTeams[i + 1].name,
-                team1Score: 0,
-                team2Score: 0,
-                date: dateStr,
-                status: 'upcoming',
-                venue: venue,
-                isLive: false
-            };
-            AppData.matches.push(newMatch);
-
-            dayOffset++;
+                    const newMatch = {
+                        id: matchIdCounter++,
+                        tournamentId: this.currentTournamentId,
+                        round: '常规赛',
+                        team1Id: shuffledTeams[i].id,
+                        team2Id: shuffledTeams[j].id,
+                        team1Name: shuffledTeams[i].name,
+                        team2Name: shuffledTeams[j].name,
+                        team1Score: 0,
+                        team2Score: 0,
+                        date: dateStr,
+                        status: 'upcoming',
+                        venue: venue,
+                        isLive: false
+                    };
+                    AppData.matches.push(newMatch);
+                    newMatchCount++;
+                    dayOffset += 0.5;
+                }
+            }
         }
 
-        Utils.showToast(`赛程生成成功！共生成 ${Math.floor(teams.length / 2)} 场比赛`, 'success');
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
+        Utils.showToast(`赛程生成成功！共新增 ${newMatchCount} 场比赛`, 'success');
+        this.refresh();
+    },
+
+    generateKnockoutSchedule() {
+        const teams = getTeamsByTournament(this.currentTournamentId);
+        if (teams.length < 4) {
+            Utils.showToast('至少需要4支队伍才能生成淘汰赛', 'warning');
+            return;
+        }
+
+        const shuffled = [...teams].sort(() => Math.random() - 0.5);
+        const selected = shuffled.slice(0, Math.min(8, teams.length));
+
+        let matchIdCounter = Date.now();
+        const startDate = new Date().toISOString().split('T')[0];
+
+        const quarterCount = Math.floor(selected.length / 2);
+        const semiCount = Math.max(1, Math.floor(quarterCount / 2));
+        const finalCount = 1;
+
+        let dayOffset = 0;
+
+        if (selected.length >= 8) {
+            for (let i = 0; i < 4; i++) {
+                const t1 = selected[i * 2];
+                const t2 = selected[i * 2 + 1];
+                if (!t1 || !t2) continue;
+
+                const matchDate = new Date(startDate);
+                matchDate.setDate(matchDate.getDate() + dayOffset);
+
+                AppData.matches.push({
+                    id: matchIdCounter++,
+                    tournamentId: this.currentTournamentId,
+                    round: '四分之一决赛',
+                    team1Id: t1.id,
+                    team2Id: t2.id,
+                    team1Name: t1.name,
+                    team2Name: t2.name,
+                    team1Score: 0,
+                    team2Score: 0,
+                    date: matchDate.toISOString().split('T')[0] + ' 14:00',
+                    status: 'upcoming',
+                    venue: '主赛场',
+                    isLive: false
+                });
+                dayOffset++;
+            }
+        }
+
+        for (let i = 0; i < semiCount; i++) {
+            const t1 = selected[i * 2] || { name: '待定', id: 0 };
+            const t2 = selected[i * 2 + 1] || { name: '待定', id: 0 };
+
+            const matchDate = new Date(startDate);
+            matchDate.setDate(matchDate.getDate() + dayOffset + 3);
+
+            AppData.matches.push({
+                id: matchIdCounter++,
+                tournamentId: this.currentTournamentId,
+                round: '半决赛',
+                team1Id: t1.id,
+                team2Id: t2.id,
+                team1Name: t1.name,
+                team2Name: t2.name,
+                team1Score: 0,
+                team2Score: 0,
+                date: matchDate.toISOString().split('T')[0] + ' 16:00',
+                status: 'upcoming',
+                venue: '主赛场',
+                isLive: false
+            });
+        }
+
+        const finalDate = new Date(startDate);
+        finalDate.setDate(finalDate.getDate() + dayOffset + 7);
+
+        AppData.matches.push({
+            id: matchIdCounter++,
+            tournamentId: this.currentTournamentId,
+            round: '决赛',
+            team1Id: 0,
+            team2Id: 0,
+            team1Name: '半决赛胜者1',
+            team2Name: '半决赛胜者2',
+            team1Score: 0,
+            team2Score: 0,
+            date: finalDate.toISOString().split('T')[0] + ' 19:00',
+            status: 'upcoming',
+            venue: '主赛场',
+            isLive: false
+        });
+
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
+        Utils.showToast('淘汰赛对阵已生成！', 'success');
         this.refresh();
     },
 
@@ -555,7 +946,15 @@ const SchedulePage = {
                     <input type="text" class="form-input" id="editRound" value="${match.round}">
                 </div>
             </div>
-            ${match.status === 'ended' ? `
+            <div class="form-group">
+                <label class="form-label">比赛状态</label>
+                <select class="form-select" id="editStatus">
+                    <option value="upcoming" ${match.status === 'upcoming' ? 'selected' : ''}>待开始</option>
+                    <option value="live" ${match.status === 'live' ? 'selected' : ''}>进行中</option>
+                    <option value="ended" ${match.status === 'ended' ? 'selected' : ''}>已结束</option>
+                </select>
+            </div>
+            ${match.status === 'ended' || true ? `
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">队伍1得分</label>
@@ -567,16 +966,16 @@ const SchedulePage = {
                 </div>
             </div>
             ` : ''}
-            <div class="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+            <div class="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30 mt-4">
                 <p class="text-sm text-blue-400">
-                    💡 提示：修改后点击保存，列表将立即更新
+                    💡 保存后赛程列表、直播页和战绩中心都将同步更新
                 </p>
             </div>
         `;
 
         Utils.showModal(content, {
             title: '✏️ 调整比赛信息',
-            size: 'md',
+            size: 'lg',
             confirmText: '保存修改',
             onConfirm: () => {
                 this.saveMatchEdit(matchId);
@@ -594,6 +993,7 @@ const SchedulePage = {
         const time = document.getElementById('editTime').value;
         const venue = document.getElementById('editVenue').value;
         const round = document.getElementById('editRound').value;
+        const status = document.getElementById('editStatus').value;
 
         const team1 = getTeamById(team1Id);
         const team2 = getTeamById(team2Id);
@@ -605,17 +1005,27 @@ const SchedulePage = {
         match.date = `${date} ${time}`;
         match.venue = venue;
         match.round = round;
+        match.status = status;
+        match.isLive = status === 'live';
 
-        if (match.status === 'ended') {
-            const score1El = document.getElementById('editScore1');
-            const score2El = document.getElementById('editScore2');
-            if (score1El && score2El) {
-                match.team1Score = parseInt(score1El.value) || 0;
-                match.team2Score = parseInt(score2El.value) || 0;
-            }
+        const score1El = document.getElementById('editScore1');
+        const score2El = document.getElementById('editScore2');
+        if (score1El && score2El) {
+            match.team1Score = parseInt(score1El.value) || 0;
+            match.team2Score = parseInt(score2El.value) || 0;
         }
 
-        Utils.showToast('比赛信息已更新', 'success');
-        this.refresh();
+        if (typeof AppData !== 'undefined' && AppData.onMatchUpdate) {
+            AppData.onMatchUpdate(matchId);
+        }
+
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
+        Utils.showToast('比赛信息已更新，所有页面同步生效', 'success');
+        this.refresh()
+    },
+
+    refresh() {
+        const container = document.getElementById('page-schedule');
+        this.render(container);
     }
 };

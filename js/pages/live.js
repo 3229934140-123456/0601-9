@@ -441,6 +441,7 @@ const LivePage = {
         match.streamUrl = url;
         match.streamQuality = quality;
 
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('直播源嵌入成功！', 'success');
         this.refresh();
     },

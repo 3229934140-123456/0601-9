@@ -777,3 +777,64 @@ function getTeamById(id) {
 function getMatchById(id) {
     return AppData.matches.find(m => m.id === id);
 }
+
+const STORAGE_KEY = 'esports_platform_data';
+
+function saveToLocalStorage() {
+    try {
+        const data = {
+            teams: AppData.teams,
+            matches: AppData.matches,
+            appeals: AppData.appeals,
+            refereeTasks: AppData.refereeTasks,
+            announcements: AppData.announcements,
+            communityPosts: AppData.communityPosts,
+            paymentRecords: AppData.paymentRecords,
+            userCollections: userCollections,
+            danmakuList: AppData.danmakuList,
+            notifications: AppData.notifications,
+            savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        return true;
+    } catch (e) {
+        console.error('保存数据到本地存储失败:', e);
+        return false;
+    }
+}
+
+function loadFromLocalStorage() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return false;
+
+        const data = JSON.parse(saved);
+        
+        if (data.teams) AppData.teams = data.teams;
+        if (data.matches) AppData.matches = data.matches;
+        if (data.appeals) AppData.appeals = data.appeals;
+        if (data.refereeTasks) AppData.refereeTasks = data.refereeTasks;
+        if (data.announcements) AppData.announcements = data.announcements;
+        if (data.communityPosts) AppData.communityPosts = data.communityPosts;
+        if (data.paymentRecords) AppData.paymentRecords = data.paymentRecords;
+        if (data.danmakuList) AppData.danmakuList = data.danmakuList;
+        if (data.notifications) AppData.notifications = data.notifications;
+        if (data.userCollections) userCollections = data.userCollections;
+
+        console.log('已从本地存储加载数据，保存时间:', data.savedAt);
+        return true;
+    } catch (e) {
+        console.error('从本地存储加载数据失败:', e);
+        return false;
+    }
+}
+
+function clearLocalStorage() {
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+        return true;
+    } catch (e) {
+        console.error('清除本地存储失败:', e);
+        return false;
+    }
+}

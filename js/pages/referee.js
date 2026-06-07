@@ -338,7 +338,7 @@ const RefereePage = {
         };
 
         task.issues.push(newIssue);
-
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('事件记录成功', 'success');
         this.refresh();
     },
@@ -352,7 +352,7 @@ const RefereePage = {
             if (issue) {
                 issue.status = 'resolved';
             }
-
+            if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
             Utils.showToast('事件已解决', 'success');
             this.refresh();
         });
@@ -367,7 +367,7 @@ const RefereePage = {
             if (issue) {
                 issue.status = 'rejected';
             }
-
+            if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
             Utils.showToast('事件已驳回', 'info');
             this.refresh();
         });
@@ -468,6 +468,7 @@ const RefereePage = {
             }
         }
 
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('比赛已结束，结果已同步更新', 'success');
         this.refresh();
     },
@@ -525,6 +526,7 @@ const RefereePage = {
         appeal.reviewComment = comment;
         appeal.handleType = handleType;
 
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast('申诉已通过', 'success');
         this.refresh();
     },

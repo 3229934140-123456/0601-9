@@ -3,6 +3,9 @@ const App = {
     pages: {},
 
     init() {
+        if (typeof loadFromLocalStorage !== 'undefined') {
+            loadFromLocalStorage();
+        }
         this.bindNavEvents();
         this.initPages();
         this.renderPage('hall');
@@ -23,6 +26,7 @@ const App = {
         });
 
         const titles = {
+            overview: { title: '运营总览', desc: '赛事运营数据一目了然' },
             hall: { title: '赛事大厅', desc: '发现精彩校园电竞赛事' },
             team: { title: '报名组队', desc: '组建你的战队，征战赛场' },
             schedule: { title: '赛程编排', desc: '查看和管理赛事日程' },
@@ -41,6 +45,7 @@ const App = {
     },
 
     initPages() {
+        if (typeof OverviewPage !== 'undefined') this.pages.overview = OverviewPage;
         if (typeof HallPage !== 'undefined') this.pages.hall = HallPage;
         if (typeof TeamPage !== 'undefined') this.pages.team = TeamPage;
         if (typeof SchedulePage !== 'undefined') this.pages.schedule = SchedulePage;

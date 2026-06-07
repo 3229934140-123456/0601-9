@@ -140,7 +140,7 @@ const RecordPage = {
         const team1Win = match.team1Score > match.team2Score;
 
         return `
-            <div class="match-result-card">
+            <div class="match-result-card" onclick="RecordPage.showMatchDetail(${match.id})" style="cursor: pointer;">
                 <div class="result-info">
                     <div class="result-round">${match.round}</div>
                     <div class="result-date">${match.date}</div>
@@ -162,12 +162,15 @@ const RecordPage = {
                     <span class="result-team-name ${!team1Win ? 'winner-text' : 'loser-text'}">${match.team2Name}</span>
                 </div>
 
-                <div class="result-actions">
+                <div class="result-actions" onclick="event.stopPropagation();">
                     <button class="screenshot-btn" onclick="RecordPage.showScreenshots(${match.id})">
                         🖼️ 赛果截图
                     </button>
                     <button class="screenshot-btn upload-btn" onclick="RecordPage.uploadScreenshot(${match.id})">
                         📤 上传
+                    </button>
+                    <button class="screenshot-btn" onclick="RecordPage.showMatchDetail(${match.id})">
+                        📋 详情
                     </button>
                 </div>
             </div>
@@ -389,6 +392,7 @@ const RecordPage = {
 
         this.tempScreenshots = [];
 
+        if (typeof saveToLocalStorage === 'function') saveToLocalStorage();
         Utils.showToast(`成功上传 ${newScreenshots.length} 张截图！`, 'success');
         this.refresh();
         
@@ -538,6 +542,220 @@ const RecordPage = {
                 Utils.showToast('数据导出成功！', 'success');
             }
         });
+    },
+
+    showMatchDetail(matchId) {
+        const match = getMatchById(matchId);
+        if (!match) return;
+
+        const team1 = getTeamById(match.team1Id);
+        const team2 = getTeamById(match.team2Id);
+        const screenshots = match.screenshots || [];
+        const team1Win = match.team1Score > match.team2Score;
+
+        const refereeTask = AppData.refereeTasks.find(t => t.matchId === matchId);
+        const issues = refereeTask?.issues || [];
+
+        const matchAppeals = AppData.appeals.filter(a => 
+            (a.team === match.team1Name || a.team === match.team2Name) &&
+            a.tournamentId === match.tournamentId
+        );
+
+        const content = `
+            <div class="match-detail-header">
+                <div class="match-detail-teams">
+                    <div class="match-detail-team">
+                        <div class="match-detail-team-logo">${team1?.logo || '🎮'}</div>
+                        <div class="match-detail-team-name ${team1Win ? 'winner' : ''}">${match.team1Name}</div>
+                    </div>
+                    <div class="match-detail-score">
+                        <div class="match-detail-score-number">
+                            <span class="${team1Win ? 'text-success' : ''}">${match.team1Score}</span>
+                            <span style="color: var(--text-muted);">:</span>
+                            <span class="${!team1Win ? 'text-success' : ''}">${match.team2Score}</span>
+                        </div>
+                        <div class="text-sm text-muted">${match.round}</div>
+                    </div>
+                    <div class="match-detail-team">
+                        <div class="match-detail-team-logo">${team2?.logo || '🎮'}</div>
+                        <div class="match-detail-team-name ${!team1Win ? 'winner' : ''}">${match.team2Name}</div>
+                    </div>
+                </div>
+                <div class="match-detail-info">
+                    <span>📍 ${match.venue}</span>
+                    <span>🕐 ${match.date}</span>
+                    <span>⚖️ ${refereeTask?.referee || '待定'}</span>
+                </div>
+            </div>
+
+            <div class="match-detail-tabs" id="matchDetailTabs">
+                <div class="match-detail-tab active" data-tab="screenshots">🖼️ 赛果截图 (${screenshots.length})</div>
+                <div class="match-detail-tab" data-tab="events">📋 裁判事件 (${issues.length})</div>
+                <div class="match-detail-tab" data-tab="appeals">⚖️ 申诉记录</div>
+            </div>
+
+            <div class="match-detail-tab-content active" data-tab-content="screenshots">
+                <div class="match-detail-section">
+                    <h3 class="match-detail-section-title">🖼️ 赛果截图</h3>
+                ${screenshots.length > 0 ? `
+                    <div class="screenshots-grid">
+                        ${screenshots.map((src, i) => `
+                            <div class="screenshot-item" onclick="RecordPage.viewScreenshot('${src}')">
+                                <img src="${src}" alt="赛果截图 ${i + 1}">
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="export-actions">
+                        <button class="btn btn-primary btn-sm" onclick="RecordPage.uploadScreenshot(${matchId}); Utils.closeModal();">
+                            📤 上传更多截图
+                        </button>
+                    </div>
+                ` : `
+                    <div class="text-center py-8">
+                        <div class="text-4xl mb-3">🖼️</div>
+                        <p class="text-muted mb-4">暂无赛果截图</p>
+                        <button class="btn btn-primary btn-sm" onclick="RecordPage.uploadScreenshot(${matchId}); Utils.closeModal();">
+                            📤 上传截图
+                        </button>
+                    </div>
+                `}
+                </div>
+            </div>
+
+            <div class="match-detail-tab-content" data-tab-content="events">
+                <div class="match-detail-section">
+                    <h3 class="match-detail-section-title">📋 裁判事件记录</h3>
+                ${issues.length > 0 ? `
+                    <div class="space-y-3">
+                        ${issues.map(issue => `
+                            <div class="issue-item ${issue.status}">
+                                <div class="issue-header">
+                                    <span class="issue-type">${issue.type}</span>
+                                    <span class="issue-time">${issue.time}</span>
+                                    <span class="status-badge ${
+                                        issue.status === 'resolved' ? 'status-active' :
+                                        issue.status === 'rejected' ? 'status-ended' : 'status-pending'
+                                    } text-xs">
+                                        ${issue.status === 'resolved' ? '已解决' :
+                                          issue.status === 'rejected' ? '已驳回' : '待处理'}
+                                    </span>
+                                </div>
+                                <p class="issue-desc">${issue.description}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div class="text-center py-8">
+                        <div class="text-4xl mb-3">📋</div>
+                        <p class="text-muted">本场比赛无裁判事件记录</p>
+                    </div>
+                `}
+                </div>
+            </div>
+
+            <div class="match-detail-tab-content" data-tab-content="appeals">
+                <div class="match-detail-section">
+                    <h3 class="match-detail-section-title">⚖️ 申诉处理结果</h3>
+            ${matchAppeals.length > 0 ? `
+                    <div class="space-y-3">
+                        ${matchAppeals.map(appeal => `
+                            <div class="mini-appeal-item">
+                                <div class="mini-appeal-header">
+                                    <span class="mini-appeal-type">${appeal.type}</span>
+                                    <span class="status-badge ${
+                                        appeal.status === 'approved' ? 'status-active' :
+                                        appeal.status === 'rejected' ? 'status-ended' : 'status-pending'
+                                    } text-xs">
+                                        ${appeal.status === 'approved' ? '申诉通过' :
+                                          appeal.status === 'rejected' ? '申诉驳回' : '待处理'}
+                                    </span>
+                                </div>
+                                <p class="mini-appeal-desc">申诉方：${appeal.team}</p>
+                                ${appeal.reviewComment ? `<p class="text-sm text-muted mt-2">处理意见：${appeal.reviewComment}</p>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div class="text-center py-8">
+                        <div class="text-4xl mb-3">⚖️</div>
+                        <p class="text-muted">本场比赛暂无申诉记录</p>
+                    </div>
+                `}
+                </div>
+            </div>
+
+            <div class="match-detail-section">
+                <h3 class="match-detail-section-title">📤 数据导出</h3>
+                <div class="flex gap-3">
+                    <button class="btn btn-secondary btn-sm" onclick="Utils.exportToJSON(${JSON.stringify(JSON.stringify(match))}, '比赛详情_${match.team1Name}vs${match.team2Name}.json')">
+                        📄 导出 JSON
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="RecordPage.exportMatchReport(${matchId})">
+                        📊 导出战报
+                    </button>
+                </div>
+            </div>
+        `;
+
+        Utils.showModal(content, {
+            title: '📋 赛后详情',
+            size: 'xl',
+            showFooter: false
+        });
+
+        setTimeout(() => {
+            this.bindMatchDetailTabs();
+        }, 100);
+    },
+
+    bindMatchDetailTabs() {
+        document.querySelectorAll('#matchDetailTabs .match-detail-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+
+                document.querySelectorAll('#matchDetailTabs .match-detail-tab').forEach(t => {
+                    t.classList.remove('active');
+                });
+                tab.classList.add('active');
+
+                document.querySelectorAll('.match-detail-tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                const targetContent = document.querySelector(`.match-detail-tab-content[data-tab-content="${tabName}"]`);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                }
+            });
+        });
+    },
+
+    viewScreenshot(imgSrc) {
+        const content = `
+            <img src="${imgSrc}" alt="截图预览" style="width: 100%; border-radius: 10px;">
+        `;
+
+        Utils.showModal(content, {
+            title: '🔍 截图查看',
+            size: 'xl',
+            showFooter: false
+        });
+    },
+
+    exportMatchReport(matchId) {
+        const match = getMatchById(matchId);
+        if (!match) return;
+
+        const reportData = {
+            比赛: `${match.team1Name} VS ${match.team2Name}`,
+            轮次: match.round,
+            日期: match.date,
+            场地: match.venue,
+            比分: `${match.team1Score} : ${match.team2Score}`,
+            赛果截图数: match.screenshots?.length || 0
+        };
+
+        Utils.exportToJSON(reportData, `战报_${match.team1Name}vs${match.team2Name}.json`);
+        Utils.showToast('战报导出成功！', 'success');
     },
 
     refresh() {
