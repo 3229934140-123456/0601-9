@@ -158,6 +158,7 @@ const AppData = {
                 { id: 104, name: "刘ADC", role: "ADC", avatar: "player4", status: "approved" },
                 { id: 105, name: "陈辅助", role: "辅助", avatar: "player5", status: "approved" }
             ],
+            recruitPositions: ["替补位"],
             rank: 1,
             wins: 8,
             losses: 1,
@@ -180,6 +181,7 @@ const AppData = {
                 { id: 204, name: "吴下路", role: "ADC", avatar: "player9", status: "pending" },
                 { id: 205, name: "郑辅助", role: "辅助", avatar: "player10", status: "pending" }
             ],
+            recruitPositions: ["ADC位", "辅助位"],
             rank: 2,
             wins: 7,
             losses: 2,
@@ -202,6 +204,7 @@ const AppData = {
                 { id: 304, name: "朱中单", role: "中单", avatar: "player14", status: "approved" },
                 { id: 305, name: "胡辅助", role: "辅助", avatar: "player15", status: "rejected" }
             ],
+            recruitPositions: ["辅助位"],
             rank: 3,
             wins: 6,
             losses: 3,
@@ -224,6 +227,7 @@ const AppData = {
                 { id: 404, name: "罗ADC", role: "ADC", avatar: "player19", status: "approved" },
                 { id: 405, name: "梁辅助", role: "辅助", avatar: "player20", status: "approved" }
             ],
+            recruitPositions: ["上单位", "替补位"],
             rank: 4,
             wins: 5,
             losses: 4,
@@ -246,6 +250,7 @@ const AppData = {
                 { id: 504, name: "韩射手", role: "射手", avatar: "player24", status: "approved" },
                 { id: 505, name: "冯游走", role: "游走", avatar: "player25", status: "approved" }
             ],
+            recruitPositions: ["游走位"],
             rank: 1,
             wins: 10,
             losses: 0,
@@ -268,6 +273,7 @@ const AppData = {
                 { id: 604, name: "曾射手", role: "射手", avatar: "player29", status: "pending" },
                 { id: 605, name: "萧辅助", role: "辅助", avatar: "player30", status: "pending" }
             ],
+            recruitPositions: ["中路位", "射手位", "辅助位"],
             rank: 2,
             wins: 8,
             losses: 2,

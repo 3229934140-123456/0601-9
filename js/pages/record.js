@@ -249,56 +249,80 @@ const RecordPage = {
         const content = `
             <div class="text-center mb-4">
                 <h4 class="font-bold text-lg">${match.team1Name} VS ${match.team2Name}</h4>
-                <p class="text-muted">${match.round} · ${match.score || match.team1Score + ':' + match.team2Score}</p>
+                <p class="text-muted">${match.round} · ${match.team1Score}:${match.team2Score}</p>
+                <p class="text-sm text-muted mt-1">共 ${screenshots.length} 张截图</p>
             </div>
             <div class="grid grid-2 gap-4">
                 ${screenshots.length > 0 ? screenshots.map((src, i) => `
-                    <div class="screenshot-preview">
-                        <img src="${src}" alt="赛果截图 ${i + 1}" style="width: 100%; border-radius: 8px;">
+                    <div class="screenshot-preview" style="position: relative;">
+                        <img src="${src}" alt="赛果截图 ${i + 1}" style="width: 100%; border-radius: 8px; aspect-ratio: 4/3; object-fit: cover;">
+                        <div class="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                            第${i + 1}张
+                        </div>
                     </div>
                 `).join('') : `
                     <div class="col-span-2 text-center py-8">
+                        <div class="text-4xl mb-3">🖼️</div>
                         <p class="text-muted">暂无赛果截图</p>
                     </div>
                 `}
+            </div>
+            <div class="mt-4 flex justify-center gap-2">
+                <button class="btn btn-primary" id="addMoreScreenshotsBtn">
+                    📤 上传更多截图
+                </button>
             </div>
         `;
 
         Utils.showModal(content, {
             title: '🖼️ 赛果截图',
             size: 'lg',
-            showFooter: screenshots.length === 0,
-            confirmText: '上传截图',
-            onConfirm: () => {
-                Utils.showToast('请选择要上传的图片', 'info');
-                return false;
-            }
+            showFooter: false
         });
+
+        setTimeout(() => {
+            const addBtn = document.getElementById('addMoreScreenshotsBtn');
+            if (addBtn) {
+                addBtn.addEventListener('click', () => {
+                    Utils.closeModal();
+                    this.uploadScreenshot(matchId);
+                });
+            }
+        }, 100);
     },
 
     uploadScreenshot(matchId) {
+        const match = getMatchById(matchId);
+        const currentCount = match?.screenshots?.length || 0;
+
         const content = `
             <div class="form-group">
                 <label class="form-label">上传赛果截图</label>
-                <div class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors">
+                <div class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors" id="uploadArea">
                     <div class="text-4xl mb-3">🖼️</div>
                     <p class="font-semibold mb-1">点击或拖拽图片到这里</p>
                     <p class="text-sm text-muted">支持 JPG、PNG 格式，单张不超过 5MB</p>
                 </div>
+                <div id="previewContainer" class="mt-3 grid grid-3 gap-2"></div>
             </div>
             <div class="form-group">
                 <label class="form-label">比赛场次</label>
-                <select class="form-select">
-                    <option>第1局</option>
-                    <option>第2局</option>
-                    <option>第3局</option>
-                    <option>第4局</option>
-                    <option>第5局</option>
+                <select class="form-select" id="screenshotRound">
+                    <option value="第1局">第1局</option>
+                    <option value="第2局">第2局</option>
+                    <option value="第3局">第3局</option>
+                    <option value="第4局">第4局</option>
+                    <option value="第5局">第5局</option>
                 </select>
             </div>
             <div class="form-group">
                 <label class="form-label">备注说明</label>
-                <textarea class="form-textarea" placeholder="可选，填写截图相关说明"></textarea>
+                <textarea class="form-textarea" id="screenshotNote" placeholder="可选，填写截图相关说明"></textarea>
+            </div>
+            <div class="p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                <p class="text-sm text-amber-400">
+                    💡 当前已有 ${currentCount} 张截图，上传后将追加到列表中
+                </p>
             </div>
         `;
 
@@ -306,9 +330,71 @@ const RecordPage = {
             title: '📤 上传赛果截图',
             confirmText: '确认上传',
             onConfirm: () => {
-                Utils.showToast('截图上传成功！', 'success');
+                this.confirmUploadScreenshot(matchId);
             }
         });
+
+        setTimeout(() => {
+            const uploadArea = document.getElementById('uploadArea');
+            if (uploadArea) {
+                uploadArea.addEventListener('click', () => {
+                    this.simulateAddScreenshot(matchId);
+                });
+            }
+        }, 100);
+    },
+
+    simulateAddScreenshot(matchId) {
+        const match = getMatchById(matchId);
+        const previewContainer = document.getElementById('previewContainer');
+        
+        if (!match || !previewContainer) return;
+
+        const randomSeed = Date.now();
+        const mockImageUrl = `https://picsum.photos/seed/screenshot${randomSeed}/400/300`;
+
+        if (!this.tempScreenshots) {
+            this.tempScreenshots = [];
+        }
+        this.tempScreenshots.push(mockImageUrl);
+
+        const index = this.tempScreenshots.length;
+        const previewItem = document.createElement('div');
+        previewItem.className = 'relative';
+        previewItem.innerHTML = `
+            <img src="${mockImageUrl}" alt="预览" style="width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px;">
+            <div class="absolute top-1 right-1 bg-black/70 text-white text-xs px-1 rounded">第${index}张</div>
+        `;
+        previewContainer.appendChild(previewItem);
+
+        Utils.showToast(`已添加第 ${index} 张截图预览`, 'success');
+    },
+
+    confirmUploadScreenshot(matchId) {
+        const match = getMatchById(matchId);
+        if (!match) return;
+
+        const newScreenshots = this.tempScreenshots || [];
+        
+        if (newScreenshots.length === 0) {
+            Utils.showToast('请先选择要上传的图片', 'warning');
+            return false;
+        }
+
+        if (!match.screenshots) {
+            match.screenshots = [];
+        }
+
+        match.screenshots.push(...newScreenshots);
+
+        this.tempScreenshots = [];
+
+        Utils.showToast(`成功上传 ${newScreenshots.length} 张截图！`, 'success');
+        this.refresh();
+        
+        setTimeout(() => {
+            this.showScreenshots(matchId);
+        }, 300);
     },
 
     showPlayerDetail(playerId) {

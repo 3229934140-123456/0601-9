@@ -2,8 +2,13 @@ const LivePage = {
     currentMatchId: 6,
     isCollected: false,
     danmakuEnabled: true,
+    danmakuInterval: null,
 
     render(container) {
+        if (this.danmakuInterval) {
+            clearInterval(this.danmakuInterval);
+            this.danmakuInterval = null;
+        }
         container.innerHTML = this.generateHTML();
         this.bindEvents();
         this.startDanmakuSimulation();
@@ -17,6 +22,8 @@ const LivePage = {
 
         this.isCollected = userCollections.includes(this.currentMatchId);
 
+        const hasStream = currentMatch && currentMatch.streamUrl && currentMatch.streamPlatform;
+
         return `
             <div class="live-container">
                 <div class="live-main">
@@ -25,16 +32,7 @@ const LivePage = {
                         <div class="live-viewers">
                             👁️ 12,580
                         </div>
-                        <div class="live-placeholder">
-                            <div class="live-placeholder-icon">📺</div>
-                            <div class="live-placeholder-text">直播画面区域</div>
-                            <div class="live-placeholder-desc text-muted text-sm mt-2">
-                                ${currentMatch ? `${currentMatch.team1Name} VS ${currentMatch.team2Name}` : '暂无直播'}
-                            </div>
-                            <button class="btn btn-primary mt-4" id="embedStreamBtn">
-                                🔗 嵌入直播源
-                            </button>
-                        </div>
+                        ${hasStream ? this.renderStreamPlayer(currentMatch) : this.renderPlaceholder(currentMatch)}
                     </div>
 
                     <div class="live-info-bar">
@@ -53,7 +51,10 @@ const LivePage = {
                             <button class="collect-btn" id="shareBtn">
                                 📤 分享
                             </button>
-                            <button class="btn btn-primary btn-sm" id="fullscreenBtn">
+                            <button class="btn btn-primary btn-sm" id="embedStreamBtn">
+                                🔗 ${hasStream ? '更换直播源' : '嵌入直播源'}
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="fullscreenBtn">
                                 ⛶ 全屏
                             </button>
                         </div>
@@ -79,7 +80,7 @@ const LivePage = {
                         <h3 class="text-lg font-bold mb-4">📺 更多直播</h3>
                         <div class="live-list">
                             ${[...liveMatches, ...upcomingMatches].slice(0, 4).map((match, i) => `
-                                <div class="live-card" data-match-id="${match.id}">
+                                <div class="live-card ${match.id === this.currentMatchId ? 'active' : ''}" data-match-id="${match.id}">
                                     <div class="live-card-cover">
                                         <img src="https://picsum.photos/seed/live${match.id}/400/225" alt="${match.team1Name} vs ${match.team2Name}">
                                         <div class="live-card-badge ${match.status === 'live' ? 'live' : 'upcoming'}">
@@ -173,6 +174,62 @@ const LivePage = {
         `;
     },
 
+    renderPlaceholder(currentMatch) {
+        return `
+            <div class="live-placeholder">
+                <div class="live-placeholder-icon">📺</div>
+                <div class="live-placeholder-text">直播画面区域</div>
+                <div class="live-placeholder-desc text-muted text-sm mt-2">
+                    ${currentMatch ? `${currentMatch.team1Name} VS ${currentMatch.team2Name}` : '暂无直播'}
+                </div>
+                <button class="btn btn-primary mt-4" id="embedStreamBtn">
+                    🔗 嵌入直播源
+                </button>
+            </div>
+        `;
+    },
+
+    renderStreamPlayer(match) {
+        const platformIcons = {
+            'B站直播': '📺',
+            '虎牙直播': '🐯',
+            '斗鱼直播': '🐟',
+            '抖音直播': '🎵',
+            '自定义URL': '🔗'
+        };
+        const icon = platformIcons[match.streamPlatform] || '🔗';
+
+        return `
+            <div class="live-stream-container">
+                <div class="stream-embed-area">
+                    <div class="stream-info-banner">
+                        <div class="stream-platform">
+                        <span class="stream-platform-icon">${icon}</span>
+                        <span class="stream-platform-name">${match.streamPlatform}</span>
+                    </div>
+                    <div class="stream-url-info">
+                        <span class="text-muted text-sm">直播地址：</span>
+                        <a href="${match.streamUrl}" target="_blank" class="stream-url-link">${match.streamUrl}</a>
+                    </div>
+                </div>
+                <div class="stream-preview">
+                    <img src="https://picsum.photos/seed/stream${match.id}/800/450" alt="直播画面预览" class="stream-preview-img">
+                    <div class="stream-overlay">
+                        <div class="stream-play-btn">▶</div>
+                        <div class="stream-live-indicator">
+                            <span class="live-dot"></span>
+                            LIVE
+                        </div>
+                    </div>
+                </div>
+                <div class="stream-quality-bar">
+                    <span class="text-sm text-muted">画质：${match.streamQuality || '自动'}</span>
+                    <span class="text-sm text-muted">分辨率：1920x1080</span>
+                </div>
+            </div>
+        `;
+    },
+
     renderDanmakuItem(danmaku) {
         return `
             <div class="danmaku-item">
@@ -185,6 +242,10 @@ const LivePage = {
     bindEvents() {
         document.getElementById('collectBtn')?.addEventListener('click', () => {
             this.toggleCollection();
+        });
+
+        document.getElementById('embedStreamBtn')?.addEventListener('click', () => {
+            this.showEmbedModal();
         });
 
         document.getElementById('sendDanmakuBtn')?.addEventListener('click', () => {
@@ -203,10 +264,6 @@ const LivePage = {
                 this.currentMatchId = matchId;
                 this.refresh();
             });
-        });
-
-        document.getElementById('embedStreamBtn')?.addEventListener('click', () => {
-            this.showEmbedModal();
         });
 
         document.getElementById('shareBtn')?.addEventListener('click', () => {
@@ -280,7 +337,7 @@ const LivePage = {
 
         let index = 0;
         
-        setInterval(() => {
+        this.danmakuInterval = setInterval(() => {
             if (!this.danmakuEnabled) return;
             
             const list = document.getElementById('danmakuList');
@@ -300,6 +357,11 @@ const LivePage = {
     },
 
     showEmbedModal() {
+        const currentMatch = getMatchById(this.currentMatchId);
+        const currentPlatform = currentMatch?.streamPlatform || 'B站直播';
+        const currentUrl = currentMatch?.streamUrl || '';
+        const currentQuality = currentMatch?.streamQuality || 'auto';
+
         const platforms = [
             { name: 'B站直播', icon: '📺', placeholder: 'https://live.bilibili.com/...' },
             { name: '虎牙直播', icon: '🐯', placeholder: 'https://www.huya.com/...' },
@@ -313,7 +375,7 @@ const LivePage = {
                 <label class="form-label">选择直播平台</label>
                 <div class="grid grid-3 gap-3 mb-4">
                     ${platforms.map((p, i) => `
-                        <div class="platform-option ${i === 0 ? 'selected' : ''}" data-platform="${p.name}">
+                        <div class="platform-option ${p.name === currentPlatform ? 'selected' : ''}" data-platform="${p.name}">
                             <div class="text-2xl mb-1">${p.icon}</div>
                             <div class="text-sm">${p.name}</div>
                         </div>
@@ -322,16 +384,21 @@ const LivePage = {
             </div>
             <div class="form-group">
                 <label class="form-label">直播地址</label>
-                <input type="text" class="form-input" id="streamUrl" placeholder="请输入直播房间地址或嵌入代码">
+                <input type="text" class="form-input" id="streamUrl" placeholder="请输入直播房间地址或嵌入代码" value="${currentUrl}">
             </div>
             <div class="form-group">
                 <label class="form-label">画质设置</label>
                 <select class="form-select" id="streamQuality">
-                    <option value="auto">自动</option>
-                    <option value="1080p">1080P 高清</option>
-                    <option value="720p">720P 流畅</option>
-                    <option value="480p">480P 省流</option>
+                    <option value="auto" ${currentQuality === 'auto' ? 'selected' : ''}>自动</option>
+                    <option value="1080p" ${currentQuality === '1080p' ? 'selected' : ''}>1080P 高清</option>
+                    <option value="720p" ${currentQuality === '720p' ? 'selected' : ''}>720P 流畅</option>
+                    <option value="480p" ${currentQuality === '480p' ? 'selected' : ''}>480P 省流</option>
                 </select>
+            </div>
+            <div class="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30 mt-4">
+                <p class="text-sm text-blue-400">
+                    💡 嵌入后直播区域将显示直播平台和地址信息
+                </p>
             </div>
         `;
 
@@ -339,7 +406,7 @@ const LivePage = {
             title: '嵌入直播源',
             confirmText: '确认嵌入',
             onConfirm: () => {
-                Utils.showToast('直播源嵌入成功', 'success');
+                this.saveStreamEmbed();
             }
         });
 
@@ -351,6 +418,31 @@ const LivePage = {
                 });
             });
         }, 100);
+    },
+
+    saveStreamEmbed() {
+        const match = getMatchById(this.currentMatchId);
+        if (!match) {
+            Utils.showToast('未找到当前比赛', 'error');
+            return;
+        }
+
+        const selectedPlatformEl = document.querySelector('.platform-option.selected');
+        const platform = selectedPlatformEl ? selectedPlatformEl.dataset.platform : '自定义URL';
+        const url = document.getElementById('streamUrl').value.trim();
+        const quality = document.getElementById('streamQuality').value;
+
+        if (!url) {
+            Utils.showToast('请输入直播地址', 'warning');
+            return false;
+        }
+
+        match.streamPlatform = platform;
+        match.streamUrl = url;
+        match.streamQuality = quality;
+
+        Utils.showToast('直播源嵌入成功！', 'success');
+        this.refresh();
     },
 
     refresh() {

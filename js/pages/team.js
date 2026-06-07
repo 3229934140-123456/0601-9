@@ -2,6 +2,7 @@ const TeamPage = {
     currentTournamentId: 1,
     currentTab: 'recruit',
     myTeamId: 1,
+    currentPosition: 'all',
 
     render(container) {
         container.innerHTML = this.generateHTML();
@@ -49,6 +50,10 @@ const TeamPage = {
 
     renderRecruitTab(teams) {
         const positions = ['全部位置', '上单', '打野', '中单', 'ADC', '辅助'];
+        
+        const filteredTeams = this.currentPosition === 'all' 
+            ? teams 
+            : teams.filter(team => team.recruitPositions && team.recruitPositions.includes(this.currentPosition + '位'));
 
         return `
             <div class="recruitment-card">
@@ -57,18 +62,20 @@ const TeamPage = {
                     <button class="btn btn-primary btn-sm" id="createTeamBtn">+ 创建队伍</button>
                 </div>
                 <div class="position-tags">
-                    ${positions.map((pos, i) => `
-                        <span class="position-tag ${i === 0 ? 'active' : ''}" data-position="${i === 0 ? 'all' : pos}">${pos}</span>
+                    ${positions.map(pos => `
+                        <span class="position-tag ${this.currentPosition === (pos === '全部位置' ? 'all' : pos) ? 'active' : ''}" 
+                              data-position="${pos === '全部位置' ? 'all' : pos}">${pos}</span>
                     `).join('')}
                 </div>
+                <p class="text-sm text-muted mt-2">当前显示 ${filteredTeams.length} 支招募队伍</p>
             </div>
 
             <div class="team-list" id="teamList">
-                ${teams.length > 0 ? teams.map(team => this.renderTeamCard(team)).join('') : `
+                ${filteredTeams.length > 0 ? filteredTeams.map(team => this.renderTeamCard(team)).join('') : `
                     <div class="empty-state">
                         <div class="empty-state-icon">👥</div>
-                        <div class="empty-state-text">暂无招募队伍</div>
-                        <div class="empty-state-desc">成为第一个创建队伍的人吧！</div>
+                        <div class="empty-state-text">暂无招募该位置的队伍</div>
+                        <div class="empty-state-desc">换个位置看看，或者创建自己的队伍吧</div>
                     </div>
                 `}
             </div>
@@ -78,7 +85,7 @@ const TeamPage = {
     renderTeamCard(team) {
         const pendingMembers = team.members.filter(m => m.status === 'pending').length;
         const approvedMembers = team.members.filter(m => m.status === 'approved').length;
-        const recruitPositions = ['替补位', '打野位'];
+        const recruitPositions = team.recruitPositions || ['替补位', '打野位'];
 
         return `
             <div class="team-card" data-team-id="${team.id}">
@@ -88,7 +95,7 @@ const TeamPage = {
                     <p class="team-card-slogan">${team.slogan}</p>
                     <div class="team-card-meta">
                         <span class="meta-item">👤 队长：${team.captain}</span>
-                        <span class="meta-item">👥 ${approvedMembers}/${team.members.length + pendingMembers}人</span>
+                        <span class="meta-item">👥 ${approvedMembers}/${team.members.length}人</span>
                         <span class="meta-item">📊 ${team.wins}胜${team.losses}负</span>
                     </div>
                     <div class="recruit-positions">
@@ -114,6 +121,7 @@ const TeamPage = {
             `;
         }
 
+        const approvedMembers = team.members.filter(m => m.status === 'approved');
         const pendingMembers = team.members.filter(m => m.status === 'pending');
 
         return `
@@ -151,11 +159,11 @@ const TeamPage = {
 
                     <div class="flex-between mb-3">
                         <h4 class="font-semibold">队员列表</h4>
-                        <span class="text-sm text-muted">${team.members.length}名队员</span>
+                        <span class="text-sm text-muted">${approvedMembers.length}名正式队员</span>
                     </div>
 
                     <div class="members-list">
-                        ${team.members.map(member => this.renderMemberCard(member, team.captainId === member.id)).join('')}
+                        ${approvedMembers.map(member => this.renderMemberCard(member, team.captainId === member.id)).join('')}
                     </div>
 
                     ${pendingMembers.length > 0 ? `
@@ -165,7 +173,11 @@ const TeamPage = {
                                 ${pendingMembers.map(member => this.renderPendingMember(member)).join('')}
                             </div>
                         </div>
-                    ` : ''}
+                    ` : `
+                        <div class="mt-6 p-4 bg-dark rounded-lg text-center">
+                            <p class="text-muted text-sm">暂无待审核的入队申请</p>
+                        </div>
+                    `}
                 </div>
             </div>
         `;
@@ -181,7 +193,7 @@ const TeamPage = {
                     <p class="member-name">${member.name} ${isCaptain ? '👑' : ''}</p>
                     <p class="member-role">${member.role}</p>
                 </div>
-                <span class="member-status ${member.status}">${member.status === 'approved' ? '正式队员' : '审核中'}</span>
+                <span class="member-status approved">正式队员</span>
             </div>
         `;
     },
@@ -254,6 +266,7 @@ const TeamPage = {
     bindEvents() {
         document.getElementById('tournamentSelect').addEventListener('change', (e) => {
             this.currentTournamentId = parseInt(e.target.value);
+            this.currentPosition = 'all';
             this.refresh();
         });
 
@@ -279,22 +292,24 @@ const TeamPage = {
 
         document.querySelectorAll('.position-tag').forEach(tag => {
             tag.addEventListener('click', () => {
-                document.querySelectorAll('.position-tag').forEach(t => t.classList.remove('active'));
-                tag.classList.add('active');
+                this.currentPosition = tag.dataset.position;
+                this.refresh();
             });
         });
 
         document.querySelectorAll('.approve-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                Utils.showToast('已通过入队申请', 'success');
-                this.refresh();
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const memberId = parseInt(btn.dataset.memberId);
+                this.approveMember(memberId);
             });
         });
 
         document.querySelectorAll('.reject-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                Utils.showToast('已拒绝入队申请', 'info');
-                this.refresh();
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const memberId = parseInt(btn.dataset.memberId);
+                this.rejectMember(memberId);
             });
         });
 
@@ -304,6 +319,31 @@ const TeamPage = {
                 Utils.exportToCSV(AppData.paymentRecords, '缴费记录.csv');
                 Utils.showToast('导出成功！', 'success');
             });
+        }
+    },
+
+    approveMember(memberId) {
+        const team = getTeamById(this.myTeamId);
+        if (!team) return;
+
+        const member = team.members.find(m => m.id === memberId);
+        if (member) {
+            member.status = 'approved';
+            Utils.showToast(`已通过 ${member.name} 的入队申请`, 'success');
+            this.refresh();
+        }
+    },
+
+    rejectMember(memberId) {
+        const team = getTeamById(this.myTeamId);
+        if (!team) return;
+
+        const memberIndex = team.members.findIndex(m => m.id === memberId);
+        if (memberIndex > -1) {
+            const memberName = team.members[memberIndex].name;
+            team.members.splice(memberIndex, 1);
+            Utils.showToast(`已拒绝 ${memberName} 的入队申请`, 'info');
+            this.refresh();
         }
     },
 
@@ -332,11 +372,18 @@ const TeamPage = {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">招募位置</label>
-                    <select class="form-select" id="recruitPosition">
+                    <label class="form-label">招募位置1</label>
+                    <select class="form-select" id="recruitPosition1">
                         ${positions.map(p => `<option value="${p}">${p}</option>`).join('')}
                     </select>
                 </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">招募位置2（可选）</label>
+                <select class="form-select" id="recruitPosition2">
+                    <option value="">不招募</option>
+                    ${positions.map(p => `<option value="${p}">${p}</option>`).join('')}
+                </select>
             </div>
             <div class="form-group">
                 <label class="form-label">队伍介绍</label>
@@ -354,6 +401,14 @@ const TeamPage = {
                     return false;
                 }
 
+                const recruitPositions = [];
+                const pos1 = document.getElementById('recruitPosition1').value;
+                const pos2 = document.getElementById('recruitPosition2').value;
+                if (pos1) recruitPositions.push(pos1 + '位');
+                if (pos2) recruitPositions.push(pos2 + '位');
+
+                const myPosition = document.getElementById('teamPosition').value;
+
                 const newTeam = {
                     id: Date.now(),
                     name: name,
@@ -362,8 +417,9 @@ const TeamPage = {
                     captain: '电竞小王子',
                     captainId: 999,
                     members: [
-                        { id: 999, name: '电竞小王子', role: '队长', avatar: 'player1', status: 'approved' }
+                        { id: 999, name: '电竞小王子', role: '队长/' + myPosition, avatar: 'player1', status: 'approved' }
                     ],
+                    recruitPositions: recruitPositions,
                     rank: 99,
                     wins: 0,
                     losses: 0,
@@ -386,6 +442,14 @@ const TeamPage = {
         if (!team) return;
 
         Utils.confirm(`确定要申请加入「${team.name}」吗？`, () => {
+            const applicant = {
+                id: Date.now(),
+                name: '电竞小王子',
+                role: '申请加入',
+                avatar: 'player1',
+                status: 'pending'
+            };
+            team.members.push(applicant);
             Utils.showToast('申请已发送，等待队长审核', 'success');
         });
     }

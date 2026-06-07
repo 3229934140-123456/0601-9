@@ -88,7 +88,7 @@ const RefereePage = {
                     ${task.issues.length > 0 ? `
                         <p class="text-sm text-muted mb-3">📝 比赛事件 (${task.issues.length})</p>
                         <div class="issue-list">
-                            ${task.issues.map(issue => this.renderIssueItem(issue)).join('')}
+                            ${task.issues.map(issue => this.renderIssueItem(issue, task.id)).join('')}
                         </div>
                     ` : `
                         <p class="text-sm text-muted">暂无比赛事件</p>
@@ -109,7 +109,7 @@ const RefereePage = {
         `;
     },
 
-    renderIssueItem(issue) {
+    renderIssueItem(issue, taskId) {
         const statusClass = {
             pending: '',
             resolved: 'resolved',
@@ -131,13 +131,13 @@ const RefereePage = {
                 <p class="issue-desc">${issue.description}</p>
                 ${issue.status === 'pending' ? `
                     <div class="issue-actions">
-                        <button class="btn btn-success btn-xs" onclick="RefereePage.resolveIssue(${issue.id})">
+                        <button class="btn btn-success btn-xs" onclick="RefereePage.resolveIssue(${taskId}, ${issue.id})">
                             解决
                         </button>
-                        <button class="btn btn-danger btn-xs" onclick="RefereePage.rejectIssue(${issue.id})">
+                        <button class="btn btn-danger btn-xs" onclick="RefereePage.rejectIssue(${taskId}, ${issue.id})">
                             驳回
                         </button>
-                        <button class="btn btn-secondary btn-xs" onclick="RefereePage.editIssue(${issue.id})">
+                        <button class="btn btn-secondary btn-xs" onclick="RefereePage.editIssue(${taskId}, ${issue.id})">
                             编辑
                         </button>
                     </div>
@@ -271,7 +271,10 @@ const RefereePage = {
         });
     },
 
-    recordIssue(matchId) {
+    recordIssue(taskId) {
+        const task = AppData.refereeTasks.find(t => t.id === taskId);
+        if (!task) return;
+
         const content = `
             <div class="form-group">
                 <label class="form-label">事件类型</label>
@@ -285,7 +288,7 @@ const RefereePage = {
             </div>
             <div class="form-group">
                 <label class="form-label">发生时间</label>
-                <input type="text" class="form-input" id="issueTime" placeholder="如：第2局 15:30">
+                <input type="text" class="form-input" id="issueTime" placeholder="如：第2局 15:30" value="第2局 ${Math.floor(Math.random() * 30) + 5}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}">
             </div>
             <div class="form-group">
                 <label class="form-label">事件描述</label>
@@ -297,71 +300,182 @@ const RefereePage = {
                     <span class="text-muted">点击上传截图或录像</span>
                 </div>
             </div>
+            <div class="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30 mt-4">
+                <p class="text-sm text-blue-400">
+                    💡 保存后事件将立即显示在比赛事件列表中
+                </p>
+            </div>
         `;
 
         Utils.showModal(content, {
             title: '➕ 记录比赛事件',
             confirmText: '确认记录',
             onConfirm: () => {
-                Utils.showToast('事件已记录', 'success');
-                this.refresh();
+                this.confirmRecordIssue(taskId);
             }
         });
     },
 
-    resolveIssue(issueId) {
+    confirmRecordIssue(taskId) {
+        const task = AppData.refereeTasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const type = document.getElementById('issueType').value;
+        const time = document.getElementById('issueTime').value.trim();
+        const desc = document.getElementById('issueDesc').value.trim();
+
+        if (!time || !desc) {
+            Utils.showToast('请填写完整的事件信息', 'warning');
+            return false;
+        }
+
+        const newIssue = {
+            id: Date.now(),
+            type: type,
+            time: time,
+            description: desc,
+            status: 'pending'
+        };
+
+        task.issues.push(newIssue);
+
+        Utils.showToast('事件记录成功', 'success');
+        this.refresh();
+    },
+
+    resolveIssue(taskId, issueId) {
         Utils.confirm('确定将此事件标记为已解决吗？', () => {
+            const task = AppData.refereeTasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const issue = task.issues.find(i => i.id === issueId);
+            if (issue) {
+                issue.status = 'resolved';
+            }
+
             Utils.showToast('事件已解决', 'success');
             this.refresh();
         });
     },
 
-    rejectIssue(issueId) {
+    rejectIssue(taskId, issueId) {
         Utils.confirm('确定驳回此事件吗？', () => {
+            const task = AppData.refereeTasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const issue = task.issues.find(i => i.id === issueId);
+            if (issue) {
+                issue.status = 'rejected';
+            }
+
             Utils.showToast('事件已驳回', 'info');
             this.refresh();
         });
     },
 
-    editIssue(issueId) {
+    editIssue(taskId, issueId) {
         Utils.showToast('编辑功能开发中', 'info');
     },
 
-    endMatch(matchId) {
-        Utils.confirm('确定要结束这场比赛吗？结束后将无法修改比赛结果。', () => {
-            const content = `
-                <div class="form-group">
-                    <label class="form-label">最终比分</label>
-                    <div class="flex gap-4 items-center justify-center">
-                        <input type="number" class="form-input text-center text-2xl font-bold" value="0" style="width: 80px;">
-                        <span class="text-2xl font-bold text-muted">:</span>
-                        <input type="number" class="form-input text-center text-2xl font-bold" value="0" style="width: 80px;">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">比赛结果说明</label>
-                    <textarea class="form-textarea" placeholder="可填写比赛详情、MVP等"></textarea>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">上传赛果截图</label>
-                    <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center cursor-pointer">
-                        <span class="text-muted">点击上传比赛结果截图</span>
-                    </div>
-                </div>
-            `;
+    endMatch(taskId) {
+        const task = AppData.refereeTasks.find(t => t.id === taskId);
+        if (!task) return;
 
-            Utils.showModal(content, {
-                title: '✅ 结束比赛',
-                confirmText: '确认结束',
-                onConfirm: () => {
-                    Utils.showToast('比赛已结束，结果已录入', 'success');
-                    this.refresh();
-                }
-            });
+        const match = getMatchById(task.matchId);
+
+        const currentScore1 = match ? match.team1Score : 0;
+        const currentScore2 = match ? match.team2Score : 0;
+
+        const content = `
+            <div class="text-center mb-4">
+                <h4 class="font-bold text-lg">${task.team1} VS ${task.team2}</h4>
+                <p class="text-muted">${task.round}</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">最终比分</label>
+                <div class="flex gap-4 items-center justify-center">
+                    <input type="number" class="form-input text-center text-2xl font-bold" id="finalScore1" value="${currentScore1}" min="0" style="width: 80px;">
+                    <span class="text-2xl font-bold text-muted">:</span>
+                    <input type="number" class="form-input text-center text-2xl font-bold" id="finalScore2" value="${currentScore2}" min="0" style="width: 80px;">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">比赛结果说明</label>
+                <textarea class="form-textarea" id="matchResultNote" placeholder="可填写比赛详情、MVP等"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">上传赛果截图</label>
+                <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center cursor-pointer">
+                    <span class="text-muted">点击上传比赛结果截图</span>
+                </div>
+            </div>
+            <div class="p-3 bg-amber-500/10 rounded-lg border border-amber-500/30 mt-4">
+                <p class="text-sm text-amber-400">
+                    ⚠️ 结束比赛后状态将变为已结束，比分将同步到赛程编排和战绩中心
+                </p>
+            </div>
+        `;
+
+        Utils.showModal(content, {
+            title: '✅ 结束比赛',
+            confirmText: '确认结束',
+            onConfirm: () => {
+                this.confirmEndMatch(taskId);
+            }
         });
     },
 
+    confirmEndMatch(taskId) {
+        const task = AppData.refereeTasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const score1 = parseInt(document.getElementById('finalScore1').value) || 0;
+        const score2 = parseInt(document.getElementById('finalScore2').value) || 0;
+        const note = document.getElementById('matchResultNote').value.trim();
+
+        task.status = 'completed';
+
+        const match = getMatchById(task.matchId);
+        if (match) {
+            match.status = 'ended';
+            match.isLive = false;
+            match.team1Score = score1;
+            match.team2Score = score2;
+            if (note) {
+                match.resultNote = note;
+            }
+        }
+
+        const team1 = AppData.teams.find(t => t.name === task.team1);
+        const team2 = AppData.teams.find(t => t.name === task.team2);
+
+        if (team1 && team2) {
+            if (score1 > score2) {
+                team1.wins++;
+                team2.losses++;
+                team1.points += 3;
+            } else if (score2 > score1) {
+                team2.wins++;
+                team1.losses++;
+                team2.points += 3;
+            } else {
+                team1.wins = team1.wins || 0;
+                team2.wins = team2.wins || 0;
+                team1.losses = team1.losses || 0;
+                team2.losses = team2.losses || 0;
+                team1.points += 1;
+                team2.points += 1;
+            }
+        }
+
+        Utils.showToast('比赛已结束，结果已同步更新', 'success');
+        this.refresh();
+    },
+
     approveAppeal(appealId) {
+        const appeal = AppData.appeals.find(a => a.id === appealId);
+        if (!appeal) return;
+
         const content = `
             <div class="form-group">
                 <label class="form-label">处理意见</label>
@@ -369,11 +483,11 @@ const RefereePage = {
             </div>
             <div class="form-group">
                 <label class="form-label">处理方式</label>
-                <select class="form-select">
-                    <option>重赛</option>
-                    <option>改判</option>
-                    <option>扣除积分</option>
-                    <option>警告处理</option>
+                <select class="form-select" id="appealHandleType">
+                    <option value="重赛">重赛</option>
+                    <option value="改判">改判</option>
+                    <option value="扣除积分">扣除积分</option>
+                    <option value="警告处理">警告处理</option>
                 </select>
             </div>
         `;
@@ -382,13 +496,43 @@ const RefereePage = {
             title: '✅ 通过申诉',
             confirmText: '确认通过',
             onConfirm: () => {
-                Utils.showToast('申诉已通过', 'success');
-                this.refresh();
+                this.confirmApproveAppeal(appealId);
             }
         });
     },
 
+    confirmApproveAppeal(appealId) {
+        const appeal = AppData.appeals.find(a => a.id === appealId);
+        if (!appeal) return;
+
+        const comment = document.getElementById('approveComment').value.trim();
+        const handleType = document.getElementById('appealHandleType').value;
+
+        if (!comment) {
+            Utils.showToast('请填写处理意见', 'warning');
+            return false;
+        }
+
+        appeal.status = 'approved';
+        appeal.reviewer = '张裁判';
+        appeal.reviewTime = new Date().toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        }).replace(/\//g, '-');
+        appeal.reviewComment = comment;
+        appeal.handleType = handleType;
+
+        Utils.showToast('申诉已通过', 'success');
+        this.refresh();
+    },
+
     rejectAppeal(appealId) {
+        const appeal = AppData.appeals.find(a => a.id === appealId);
+        if (!appeal) return;
+
         const content = `
             <div class="form-group">
                 <label class="form-label">驳回理由</label>
@@ -400,10 +544,35 @@ const RefereePage = {
             title: '❌ 驳回申诉',
             confirmText: '确认驳回',
             onConfirm: () => {
-                Utils.showToast('申诉已驳回', 'info');
-                this.refresh();
+                this.confirmRejectAppeal(appealId);
             }
         });
+    },
+
+    confirmRejectAppeal(appealId) {
+        const appeal = AppData.appeals.find(a => a.id === appealId);
+        if (!appeal) return;
+
+        const comment = document.getElementById('rejectComment').value.trim();
+
+        if (!comment) {
+            Utils.showToast('请填写驳回理由', 'warning');
+            return false;
+        }
+
+        appeal.status = 'rejected';
+        appeal.reviewer = '裁判委员会';
+        appeal.reviewTime = new Date().toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        }).replace(/\//g, '-');
+        appeal.reviewComment = comment;
+
+        Utils.showToast('申诉已驳回', 'info');
+        this.refresh();
     },
 
     reviewAppeal(appealId) {
